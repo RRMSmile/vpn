@@ -5,3 +5,10 @@ dist
 .env.*
 *.log
 .DS_Store
+
+# local/dev
+cookies*.txt
+.pnpm-store/
+*.bak.*
+*.bak
+/tmp/

@@ -1,0 +1,16 @@
+{
+  "name": "cloudgate-mvp",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "db:migrate": "pnpm --filter @cloudgate/api prisma migrate dev",
+    "db:deploy": "pnpm --filter @cloudgate/api prisma migrate deploy",
+    "db:studio": "pnpm --filter @cloudgate/api prisma studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

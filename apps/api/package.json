@@ -1,0 +1,32 @@
+{
+  "name": "@cloudgate/api",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "prisma": "prisma",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@cloudgate/shared": "workspace:*",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^10.1.0",
+    "@fastify/jwt": "^10.0.0",
+    "@prisma/client": "^5.18.0",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.6.2",
+    "nodemailer": "^6.9.14",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "prisma": "^5.18.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}

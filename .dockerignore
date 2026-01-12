@@ -1,0 +1,16 @@
+.git
+**/.git
+node_modules
+**/node_modules
+.pnpm-store
+**/.pnpm-store
+.next
+**/.next
+dist
+**/dist
+coverage
+**/coverage
+*.log
+cookies*.txt
+tmp
+/tmp

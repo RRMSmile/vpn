@@ -1,0 +1,47 @@
+"use client";
+
+import { useState } from "react";
+
+export default function LoginPage() {
+  const [email, setEmail] = useState("admin@example.com");
+  const [status, setStatus] = useState<string>("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus("Отправляем ссылку...");
+
+    const r = await fetch("/api/auth/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+
+    if (!r.ok) {
+      const t = await r.text();
+      setStatus("Ошибка: " + t);
+      return;
+    }
+
+    setStatus("Готово. Проверь MailHog (http://localhost:8025) 🙂");
+  }
+
+  return (
+    <main style={{ padding: 24, fontFamily: "system-ui" }}>
+      <h1>Вход</h1>
+      <form onSubmit={submit} style={{ display: "grid", gap: 12, maxWidth: 420 }}>
+        <label>
+          Email
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ width: "100%", padding: 10, fontSize: 16 }}
+            placeholder="you@example.com"
+          />
+        </label>
+
+        <button style={{ padding: 10, fontSize: 16 }}>Получить ссылку</button>
+        <div style={{ opacity: 0.8 }}>{status}</div>
+      </form>
+    </main>
+  );
+}

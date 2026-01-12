@@ -1,0 +1,21 @@
+FROM node:20-bookworm
+
+WORKDIR /app
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/shared/src packages/shared/src
+
+COPY apps/web/package.json apps/web/package.json
+COPY apps/web/tsconfig.json apps/web/tsconfig.json
+COPY apps/web/next.config.mjs apps/web/next.config.mjs
+
+RUN pnpm install --frozen-lockfile
+
+COPY apps/web/app apps/web/app
+COPY apps/web/lib apps/web/lib
+
+EXPOSE 3000
+CMD ["pnpm","--filter","@cloudgate/web","dev"]

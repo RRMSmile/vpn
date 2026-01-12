@@ -1,0 +1,22 @@
+{
+  "name": "@cloudgate/web",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000"
+  },
+  "dependencies": {
+    "@cloudgate/shared": "workspace:*",
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.5.4"
+  }
+}

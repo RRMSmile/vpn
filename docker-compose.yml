@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cloudgate
+      POSTGRES_USER: cloudgate
+      POSTGRES_PASSWORD: cloudgate
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://cloudgate:cloudgate@db:5432/cloudgate
+      JWT_SECRET: dev_secret_change_me
+      COOKIE_SECRET: dev_cookie_secret_change_me
+      PUBLIC_WEB_URL: http://localhost:3000
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_SECURE: "false"
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
+      ADMIN_EMAILS: "admin@example.com"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+      - mailhog
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+
+volumes:
+  dbdata:

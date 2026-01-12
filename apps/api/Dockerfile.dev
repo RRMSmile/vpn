@@ -1,0 +1,28 @@
+FROM node:20-bookworm
+
+WORKDIR /app
+
+# corepack/pnpm
+RUN corepack enable
+
+# копируем манифесты для кеша
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+
+# workspace packages
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/shared/src packages/shared/src
+
+# api package
+COPY apps/api/package.json apps/api/package.json
+COPY apps/api/tsconfig.json apps/api/tsconfig.json
+COPY apps/api/prisma apps/api/prisma
+
+# install deps (внутри контейнера)
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @cloudgate/api prisma generate
+
+# исходники API отдельно (чтобы можно было монтировать их в compose)
+COPY apps/api/src apps/api/src
+
+EXPOSE 3001
+CMD ["pnpm","--filter","@cloudgate/api","dev"]

@@ -23,8 +23,8 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://cloudgate:cloudgate@db:5432/cloudgate
-      JWT_SECRET: dev_secret_change_me
-      COOKIE_SECRET: dev_cookie_secret_change_me
+      JWT_SECRET: dev_secret_change_me_please_123456
+      COOKIE_SECRET: dev_cookie_secret_change_me_please_123456
       PUBLIC_WEB_URL: http://localhost:3000
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
@@ -33,14 +33,20 @@ services:
       SMTP_PASS: ""
       EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
       ADMIN_EMAILS: "admin@example.com"
+      WG_NODE_KEY_PATH: ""
     ports:
       - "3001:3001"
     depends_on:
       - db
       - mailhog
     volumes:
-      - ./apps/api:/app/apps/api
-      - ./packages:/app/packages
+      - ./apps/api/src:/app/apps/api/src
+      - ./apps/api/prisma:/app/apps/api/prisma
+      - ./apps/api/package.json:/app/apps/api/package.json
+      - ./apps/api/tsconfig.json:/app/apps/api/tsconfig.json
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/package.json:/app/packages/shared/package.json
+      - /app/node_modules
 
   web:
     build:
@@ -54,8 +60,14 @@ services:
     depends_on:
       - api
     volumes:
-      - ./apps/web:/app/apps/web
-      - ./packages:/app/packages
+      - ./apps/web/app:/app/apps/web/app
+      - ./apps/web/lib:/app/apps/web/lib
+      - ./apps/web/package.json:/app/apps/web/package.json
+      - ./apps/web/tsconfig.json:/app/apps/web/tsconfig.json
+      - ./apps/web/next.config.mjs:/app/apps/web/next.config.mjs
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/package.json:/app/packages/shared/package.json
+      - /app/node_modules
 
 volumes:
   dbdata:

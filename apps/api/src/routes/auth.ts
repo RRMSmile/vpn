@@ -22,7 +22,6 @@ export async function registerAuthRoutes(app: any) {
 
     await sendMagicLink(email, url);
 
-    // В DEV мы возвращаем токен прямо в ответ, чтобы не копировать из логов
     if (env.MAIL_DEV_LOG_ONLY) {
       return reply.send({ ok: true, devToken: token, devUrl: url });
     }
@@ -51,7 +50,6 @@ export async function registerAuthRoutes(app: any) {
     });
 
     const jwtPayload = { user: { id: user.id, email: user.email, role: user.role } };
-
     const session = await reply.jwtSign(jwtPayload, { expiresIn: "30d" });
 
     reply.setCookie("cg_session", session, {

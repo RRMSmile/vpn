@@ -12,3 +12,6 @@ cookies*.txt
 *.bak.*
 *.bak
 /tmp/
+
+*.conf
+

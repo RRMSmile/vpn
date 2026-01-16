@@ -3,23 +3,27 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-function splitArgs(s: string): string[] {
-  if (!s) return [];
-  return s.split(/\s+/).filter(Boolean);
-}
+export async function sshExec(params: {
+  host: string;
+  user: string;
+  sshOpts?: string; // "-o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+  cmd: string;
+  timeoutMs?: number;
+}) {
+  const args: string[] = [];
 
-export async function sshExec(cmd: string): Promise<{ stdout: string; stderr: string }> {
-  const host = (process.env.WG_NODE_SSH_HOST || "").trim();
-  const user = (process.env.WG_NODE_SSH_USER || "yc-user").trim();
-  if (!host) throw new Error("WG_NODE_SSH_HOST is empty");
+  if (params.sshOpts && params.sshOpts.trim()) {
+    // простая разбивка; для наших -o норм
+    args.push(...params.sshOpts.trim().split(/\s+/g));
+  }
 
-  const opts = (process.env.WG_NODE_SSH_OPTS || "-o BatchMode=yes -o StrictHostKeyChecking=accept-new").trim();
-  const args = [...splitArgs(opts), `${user}@${host}`, cmd];
+  args.push(`${params.user}@${params.host}`);
+  args.push(params.cmd);
 
   const { stdout, stderr } = await execFileAsync("ssh", args, {
-    timeout: 20_000,
-    maxBuffer: 5_000_000
+    timeout: params.timeoutMs ?? 30_000,
+    maxBuffer: 10 * 1024 * 1024,
   });
 
-  return { stdout: String(stdout ?? ""), stderr: String(stderr ?? "") };
+  return { stdout: stdout ?? "", stderr: stderr ?? "" };
 }

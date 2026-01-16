@@ -8,33 +8,36 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String    @id @default(cuid())
+  email     String    @unique
+  role      String    @default("user")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  Device    Device[]
+  VpnPeer   VpnPeer[]
 }
 
 model MagicToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
   email     String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([email])
 }
 
 model Device {
-  id         String   @id @default(cuid())
-  userId     String
-  deviceId   String   @unique
-  platform   String   @default("ios")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  deviceId  String   @unique
+  platform  String   @default("ios")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  VpnPeer VpnPeer[]
 
   @@index([userId])
 }
@@ -55,14 +58,14 @@ model VpnNode {
 }
 
 model VpnPeer {
-  id         String   @id @default(cuid())
-  userId     String
-  deviceId   String
-  nodeId     String
-  publicKey  String
-  allowedIp  String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  deviceId  String
+  nodeId    String
+  publicKey String
+  allowedIp String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   device Device  @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)

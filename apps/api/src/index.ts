@@ -38,8 +38,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  // чтобы в dev было видно фатал
-  // eslint-disable-next-line no-console
   console.error(e);
   process.exit(1);
 });

@@ -25,3 +25,51 @@ model MagicToken {
 
   @@index([email])
 }
+
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceId   String   @unique
+  platform   String   @default("ios")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VpnNode {
+  id        String   @id @default(cuid())
+  name      String
+  host      String
+  port      Int      @default(51820)
+  interface String   @default("wg0")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  peers VpnPeer[]
+
+  @@index([isActive])
+}
+
+model VpnPeer {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceId   String
+  nodeId     String
+  publicKey  String
+  allowedIp  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device  @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  node   VpnNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@unique([nodeId, publicKey])
+  @@unique([nodeId, allowedIp])
+  @@index([userId])
+  @@index([deviceId])
+}

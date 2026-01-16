@@ -8,71 +8,75 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  role      String    @default("user")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  Device    Device[]
-  VpnPeer   VpnPeer[]
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+
+  devices Device[]
+  peers   Peer[]
 }
 
 model MagicToken {
-  id        String    @id @default(cuid())
-  tokenHash String    @unique
+  tokenHash String    @id
   email     String
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([email])
+  @@index([expiresAt])
 }
 
 model Device {
   id        String   @id @default(cuid())
   userId    String
-  deviceId  String   @unique
-  platform  String   @default("ios")
+  deviceId  String
+  name      String
+  platform  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  VpnPeer VpnPeer[]
+  user  User   @relation(fields: [userId], references: [id])
+  peers Peer[]
 
+  @@unique([userId, deviceId], name: "userId_deviceId")
   @@index([userId])
 }
 
-model VpnNode {
-  id        String   @id @default(cuid())
-  name      String
-  host      String
-  port      Int      @default(51820)
-  interface String   @default("wg0")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Node {
+  id              String   @id
+  name            String
+  sshHost         String
+  sshUser         String
+  wgInterface     String   @default("wg0")
+  wgPort          Int      @default(51820)
+  endpointHost    String
+  serverPublicKey String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  peers VpnPeer[]
-
-  @@index([isActive])
+  peers Peer[]
 }
 
-model VpnPeer {
-  id        String   @id @default(cuid())
-  userId    String
-  deviceId  String
-  nodeId    String
+model Peer {
+  id       String @id @default(cuid())
+  userId   String
+  deviceId String
+  nodeId   String
+
   publicKey String
   allowedIp String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device Device  @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
-  node   VpnNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+  device Device @relation(fields: [deviceId], references: [id])
+  node   Node   @relation(fields: [nodeId], references: [id])
 
   @@unique([nodeId, publicKey])
   @@unique([nodeId, allowedIp])
   @@index([userId])
   @@index([deviceId])
+  @@index([nodeId])
 }

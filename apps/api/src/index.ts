@@ -5,8 +5,9 @@ import fastifyJwt from "@fastify/jwt";
 
 import authPlugin from "./plugins/auth";
 import { registerAuthRoutes } from "./routes/auth";
-
 import { registerVpnRoutes } from "./routes/vpn";
+import { env } from "./env";
+
 async function main() {
   const app = Fastify({ logger: true });
 
@@ -14,16 +15,14 @@ async function main() {
     origin: ["http://localhost:3000"],
     credentials: true,
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["content-type"]
+    allowedHeaders: ["content-type"],
   });
 
-  // ВАЖНО: cookie должен быть зарегистрирован, чтобы jwt мог читать токен из req.cookies
-  await app.register(cookie, { secret: process.env.COOKIE_SECRET });
+  await app.register(cookie, { secret: env.COOKIE_SECRET });
 
-  // Включаем cookie-режим у jwt: jwtVerify() будет брать токен из cookie cg_session
   await app.register(fastifyJwt, {
-    secret: process.env.JWT_SECRET,
-    cookie: { cookieName: "cg_session", signed: false }
+    secret: env.JWT_SECRET,
+    cookie: { cookieName: "cg_session", signed: false },
   });
 
   await app.register(authPlugin);
@@ -32,10 +31,15 @@ async function main() {
 
   await registerAuthRoutes(app);
   await registerVpnRoutes(app);
-  const port = Number(process.env.PORT || 3001);
-  const host = "0.0.0.0";
 
+  const port = Number(env.PORT || 3001);
+  const host = "0.0.0.0";
   await app.listen({ port, host });
 }
 
-main();
+main().catch((e) => {
+  // чтобы в dev было видно фатал
+  // eslint-disable-next-line no-console
+  console.error(e);
+  process.exit(1);
+});

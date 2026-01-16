@@ -7,13 +7,7 @@ async function requireAuth(req: any) {
 }
 
 function getUserId(req: any): string | null {
-  // поддержим разные варианты на будущее
-  return (
-    req.user?.sub ??
-    req.user?.id ??
-    req.user?.user?.id ??
-    null
-  );
+  return req.user?.sub ?? req.user?.id ?? req.user?.user?.id ?? null;
 }
 
 export async function registerVpnRoutes(app: FastifyInstance) {
@@ -42,7 +36,7 @@ export async function registerVpnRoutes(app: FastifyInstance) {
       const userId = getUserId(req);
       if (!userId) return reply.code(401).send({ error: "unauthorized" });
 
-      const peerId = z.string().min(1).parse(req.params.peerId);
+      const peerId = z.string().min(1).parse((req.params as any).peerId);
       return await revokePeer(userId, peerId);
     }
   );

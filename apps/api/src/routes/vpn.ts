@@ -2,6 +2,8 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ProvisionInputSchema, provisionIosPeer, revokePeer } from "../lib/vpn-provision";
 import { renderClientConfig } from "../lib/wg-config";
+import { prisma } from "../lib/prisma";
+import { env } from "../env";
 
 async function requireAuth(req: any) {
   await req.jwtVerify();
@@ -11,7 +13,42 @@ function getUserId(req: any): string | null {
   return req.user?.sub ?? req.user?.id ?? req.user?.user?.id ?? null;
 }
 
+function buildConfigTemplate(params: {
+  addressIp: string; // "10.8.0.10"
+  dns: string;
+  serverPublicKey: string;
+  endpointHost: string;
+  endpointPort: number;
+}) {
+  const { addressIp, dns, serverPublicKey, endpointHost, endpointPort } = params;
+
+  return [
+    `[Interface]`,
+    `PrivateKey = {{CLIENT_PRIVATE_KEY}}`,
+    `Address = ${addressIp}/32`,
+    `DNS = ${dns}`,
+    ``,
+    `[Peer]`,
+    `PublicKey = ${serverPublicKey}`,
+    `Endpoint = ${endpointHost}:${endpointPort}`,
+    `AllowedIPs = 0.0.0.0/0`,
+    `PersistentKeepalive = 25`,
+    ``,
+  ].join("\n");
+}
+
+function safeFilename(s: string) {
+  // максимально безопасно для Content-Disposition
+  const cleaned = (s || "device")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return cleaned || "device";
+}
+
 export async function registerVpnRoutes(app: FastifyInstance) {
+  // iOS provision (создать/вернуть peer)
   app.post(
     "/vpn/ios/provision",
     { preHandler: requireAuth },
@@ -30,6 +67,7 @@ export async function registerVpnRoutes(app: FastifyInstance) {
     }
   );
 
+  // revoke peer
   app.post(
     "/vpn/peer/:peerId/revoke",
     { preHandler: requireAuth },
@@ -38,9 +76,13 @@ export async function registerVpnRoutes(app: FastifyInstance) {
       if (!userId) return reply.code(401).send({ error: "unauthorized" });
 
       const peerId = z.string().min(1).parse((req.params as any).peerId);
-      return await revokePeer(userId, peerId);
+      const res = await revokePeer(userId, peerId);
+      return res;
     }
   );
+
+  // download config as text/plain
+  // optional: ?clientPrivateKey=... (НЕ хранится, просто подставим в шаблон)
   app.get(
     "/vpn/peer/:peerId/config",
     { preHandler: requireAuth },
@@ -50,14 +92,36 @@ export async function registerVpnRoutes(app: FastifyInstance) {
 
       const peerId = z.string().min(1).parse((req.params as any).peerId);
 
-      // reuse existing logic: revokePeer/provision already know how to build template,
-      // but here we read from DB and rebuild minimal template response
-      // We'll call /vpn/ios/provision logic indirectly by simply refusing if peer missing.
-      // The provisioning function already stores node+peer; we can reconstruct template on the fly in a later pass.
-      // For MVP: return template from DB requires we store it, so instead we just return placeholder template from current API contract.
-      // NOTE: Full implementation in next patch will rebuild from Node fields.
-      return reply.code(501).send({ error: "not_implemented", hint: "Implement config download by rebuilding template from Peer+Node. See TODO." });
+      const peer = await prisma.peer.findFirst({
+        where: { id: peerId, userId },
+        include: { node: true, device: true },
+      });
+
+      if (!peer) return reply.code(404).send({ error: "peer_not_found" });
+
+      // можно запретить выдачу для revoked, но для дебага иногда полезно
+      // if (peer.revokedAt) return reply.code(410).send({ error: "peer_revoked" });
+
+      const template = buildConfigTemplate({
+        addressIp: peer.allowedIp,
+        dns: env.WG_CLIENT_DNS,
+        serverPublicKey: peer.node.serverPublicKey,
+        endpointHost: peer.node.endpointHost,
+        endpointPort: peer.node.wgPort,
+      });
+
+      const q = (req.query ?? {}) as any;
+      const clientPrivateKey =
+        typeof q.clientPrivateKey === "string" ? q.clientPrivateKey : undefined;
+
+      const cfg = renderClientConfig({ template, clientPrivateKey });
+
+      const fnameBase = safeFilename(peer.device?.deviceId || peer.deviceId || "device");
+      const filename = `cloudgate-${fnameBase}.conf`;
+
+      reply.header("content-type", "text/plain; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="${filename}"`);
+      return reply.send(cfg);
     }
   );
-
 }

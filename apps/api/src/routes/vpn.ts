@@ -6,12 +6,22 @@ async function requireAuth(req: any) {
   await req.jwtVerify();
 }
 
+function getUserId(req: any): string | null {
+  // поддержим разные варианты на будущее
+  return (
+    req.user?.sub ??
+    req.user?.id ??
+    req.user?.user?.id ??
+    null
+  );
+}
+
 export async function registerVpnRoutes(app: FastifyInstance) {
   app.post(
     "/vpn/ios/provision",
     { preHandler: requireAuth },
     async (req: any, reply) => {
-      const userId = req.user?.sub ?? req.user?.id;
+      const userId = getUserId(req);
       if (!userId) return reply.code(401).send({ error: "unauthorized" });
 
       const body = ProvisionInputSchema.parse(req.body);
@@ -29,12 +39,11 @@ export async function registerVpnRoutes(app: FastifyInstance) {
     "/vpn/peer/:peerId/revoke",
     { preHandler: requireAuth },
     async (req: any, reply) => {
-      const userId = req.user?.sub ?? req.user?.id;
+      const userId = getUserId(req);
       if (!userId) return reply.code(401).send({ error: "unauthorized" });
 
       const peerId = z.string().min(1).parse(req.params.peerId);
-      const res = await revokePeer(userId, peerId);
-      return res;
+      return await revokePeer(userId, peerId);
     }
   );
 }

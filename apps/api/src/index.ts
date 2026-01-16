@@ -17,10 +17,10 @@ async function main() {
     allowedHeaders: ["content-type"]
   });
 
-  // ВАЖНО: cookie должен быть зарегистрирован, чтобы jwt мог читать токен из req.cookies :contentReference[oaicite:1]{index=1}
+  // ВАЖНО: cookie должен быть зарегистрирован, чтобы jwt мог читать токен из req.cookies
   await app.register(cookie, { secret: process.env.COOKIE_SECRET });
 
-  // Включаем cookie-режим у jwt: jwtVerify() будет брать токен из cookie cg_session :contentReference[oaicite:2]{index=2}
+  // Включаем cookie-режим у jwt: jwtVerify() будет брать токен из cookie cg_session
   await app.register(fastifyJwt, {
     secret: process.env.JWT_SECRET,
     cookie: { cookieName: "cg_session", signed: false }

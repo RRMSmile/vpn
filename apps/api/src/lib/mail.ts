@@ -1,26 +1,32 @@
 import nodemailer from "nodemailer";
+import { env } from "../env";
 
-export async function sendMagicLink(email: string, url: string) {
-  const host = process.env.SMTP_HOST || "mailhog";
-  const port = Number(process.env.SMTP_PORT || 1025);
-  const secure = String(process.env.SMTP_SECURE || "false") === "true";
-
-  const user = process.env.SMTP_USER || undefined;
-  const pass = process.env.SMTP_PASS || undefined;
+export async function sendMagicLink(to: string, url: string) {
+  // DEV-режим: не отправляем письма, просто печатаем ссылку
+  if (env.MAIL_DEV_LOG_ONLY) {
+    // eslint-disable-next-line no-console
+    console.log(`[MAIL_DEV_LOG_ONLY] magic link for ${to}: ${url}`);
+    return;
+  }
 
   const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: user ? { user, pass } : undefined
+    host: env.MAIL_HOST,
+    port: env.MAIL_PORT,
+    secure: false,
   });
 
-  const from = process.env.EMAIL_FROM || "CloudGate <no-reply@cloudgate.local>";
-
-  await transporter.sendMail({
-    from,
-    to: email,
-    subject: "CloudGate: ссылка для входа",
-    text: `Вход в CloudGate:\n${url}\n\nЕсли вы не запрашивали вход, просто игнорируйте письмо.`,
-  });
+  try {
+    await transporter.sendMail({
+      from: env.MAIL_FROM,
+      to,
+      subject: "CloudGate login link",
+      text: `Open: ${url}`,
+      html: `<p>Open: <a href="${url}">${url}</a></p>`,
+    });
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.warn(`[MAIL_FALLBACK] failed to send mail, logging link instead: ${e?.message ?? e}`);
+    // eslint-disable-next-line no-console
+    console.log(`[MAIL_FALLBACK] magic link for ${to}: ${url}`);
+  }
 }

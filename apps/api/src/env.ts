@@ -6,6 +6,10 @@ const EnvSchema = z.object({
   JWT_SECRET: z.string().min(10),
   COOKIE_SECRET: z.string().min(10),
 
+  MAIL_HOST: z.string().default("localhost"),
+  MAIL_PORT: z.coerce.number().int().positive().default(1025),
+  MAIL_FROM: z.string().default("no-reply@cloudgate.local"),
+  MAIL_DEV_LOG_ONLY: z.coerce.boolean().default(false),
   WG_NODE_SSH_HOST: z.string().min(3),
   WG_NODE_SSH_USER: z.string().min(1),
   WG_NODE_SSH_OPTS: z.string().optional().default(""),

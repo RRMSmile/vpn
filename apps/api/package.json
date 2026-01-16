@@ -10,7 +10,9 @@
     "prisma": "prisma",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "lint:guards": "bash scripts/guard-artifacts.sh",
+    "prebuild": "bash scripts/guard-artifacts.sh"
   },
   "dependencies": {
     "@cloudgate/shared": "workspace:*",

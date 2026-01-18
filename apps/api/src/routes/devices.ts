@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { env } from "../env";
+import { wgAddPeer, wgRemovePeer } from "../lib/wg-node";
 
 // строгая проверка WireGuard publicKey (base64, 44 chars, заканчивается "=")
 const WG_PUBLIC_KEY_RE = /^[A-Za-z0-9+/]{43}=$/;
@@ -164,6 +165,18 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
         data: { revokedAt: null },
       });
 
+      // apply peer on WireGuard node (idempotent)
+      try {
+        await wgAddPeer({
+          publicKey: peer.publicKey,
+          allowedIp: peer.allowedIp,
+          node: { sshHost: node.sshHost, sshUser: node.sshUser, wgInterface: node.wgInterface },
+        });
+      } catch (e: any) {
+        req.log?.error({ err: e }, "wgAddPeer failed");
+        return reply.code(502).send({ error: "WG_ADD_FAILED" });
+      }
+
       return reply.code(200).send({
         node: {
           id: node.id,
@@ -192,6 +205,18 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
       } as any,
     });
 
+    // apply peer on WireGuard node (ssh)
+    try {
+      await wgAddPeer({
+        publicKey: peer.publicKey,
+        allowedIp: peer.allowedIp,
+        node: { sshHost: node.sshHost, sshUser: node.sshUser, wgInterface: node.wgInterface },
+      });
+    } catch (e: any) {
+      req.log?.error({ err: e }, "wgAddPeer failed");
+      return reply.code(502).send({ error: "WG_ADD_FAILED" });
+    }
+
     return reply.code(201).send({
       node: {
         id: node.id,
@@ -210,14 +235,25 @@ export async function registerDeviceRoutes(app: FastifyInstance) {
     const device = await prisma.device.findUnique({ where: { id } as any });
     if (!device) return reply.code(404).send({ error: "device_not_found" });
 
-    const nodeId = process.env.WG_NODE_ID ?? "wg-node-1";
+    const node = await ensureNode();
 
     const active = await prisma.peer.findFirst({
-      where: { deviceId: device.id, nodeId, revokedAt: null },
+      where: { deviceId: device.id, nodeId: node.id, revokedAt: null },
       orderBy: { createdAt: "desc" } as any,
     });
 
     if (!active) return reply.code(200).send({ revoked: false });
+
+    // remove peer from WireGuard node (strict: if fail -> do not mark revoked)
+    try {
+      await wgRemovePeer({
+        publicKey: active.publicKey,
+        node: { sshHost: node.sshHost, sshUser: node.sshUser, wgInterface: node.wgInterface },
+      });
+    } catch (e: any) {
+      req.log?.error({ err: e }, "wgRemovePeer failed");
+      return reply.code(502).send({ error: "WG_REMOVE_FAILED" });
+    }
 
     await prisma.peer.update({
       where: { id: active.id } as any,

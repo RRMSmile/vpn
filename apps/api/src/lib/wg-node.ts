@@ -1,50 +1,68 @@
-import { sshExec } from "./ssh";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { env } from "../env";
 
-export async function wgSetPeer(params: {
+const execFileAsync = promisify(execFile);
+
+type SshExecOpts = {
   host: string;
   user: string;
-  sshOpts?: string;
-  iface: string;
+  opts?: string; // extra ssh options as string
+};
+
+async function sshExec(cmd: string, ssh: SshExecOpts): Promise<{ stdout: string; stderr: string }> {
+  const args: string[] = [];
+
+  // базово: не интерактивно, без StrictHostKeyChecking (в проде можно ужесточить)
+  args.push("-o", "BatchMode=yes");
+  args.push("-o", "StrictHostKeyChecking=no");
+
+  if (ssh.opts) {
+    // allow passing extra options like: -i /path/to/key
+    args.push(...ssh.opts.split(" ").filter(Boolean));
+  }
+
+  args.push(`${ssh.user}@${ssh.host}`, cmd);
+
+  const { stdout, stderr } = await execFileAsync("ssh", args, { timeout: 30_000 });
+  return { stdout: String(stdout ?? ""), stderr: String(stderr ?? "") };
+}
+
+export async function wgAddPeer(params: {
   publicKey: string;
-  allowedIpCidr: string; // "10.8.0.10/32"
+  allowedIp: string; // "10.8.0.6"
+  node: { sshHost: string; sshUser: string; wgInterface: string };
 }) {
-  const cmd = `sudo -n wg set ${params.iface} peer ${params.publicKey} allowed-ips ${params.allowedIpCidr}`;
-  await sshExec({
-    host: params.host,
-    user: params.user,
-    sshOpts: params.sshOpts,
-    cmd,
+  const { publicKey, allowedIp, node } = params;
+
+  const cmd = [
+    "set -euo pipefail;",
+    `sudo -n wg set ${node.wgInterface} peer ${publicKey} allowed-ips ${allowedIp}/32;`,
+    `sudo -n wg show ${node.wgInterface} | sed -n "1,20p";`,
+  ].join(" ");
+
+  return sshExec(cmd, {
+    host: node.sshHost,
+    user: node.sshUser,
+    opts: env.WG_NODE_SSH_OPTS,
   });
 }
 
 export async function wgRemovePeer(params: {
-  host: string;
-  user: string;
-  sshOpts?: string;
-  iface: string;
   publicKey: string;
+  node: { sshHost: string; sshUser: string; wgInterface: string };
 }) {
-  const cmd = `sudo -n wg set ${params.iface} peer ${params.publicKey} remove`;
-  await sshExec({
-    host: params.host,
-    user: params.user,
-    sshOpts: params.sshOpts,
-    cmd,
-  });
-}
+  const { publicKey, node } = params;
 
-export async function wgShowPublicKey(params: {
-  host: string;
-  user: string;
-  sshOpts?: string;
-  iface: string;
-}) {
-  const cmd = `sudo -n wg show ${params.iface} public-key`;
-  const { stdout } = await sshExec({
-    host: params.host,
-    user: params.user,
-    sshOpts: params.sshOpts,
-    cmd,
+  const cmd = [
+    "set -euo pipefail;",
+    `sudo -n wg set ${node.wgInterface} peer ${publicKey} remove;`,
+    `sudo -n wg show ${node.wgInterface} | sed -n "1,20p";`,
+  ].join(" ");
+
+  return sshExec(cmd, {
+    host: node.sshHost,
+    user: node.sshUser,
+    opts: env.WG_NODE_SSH_OPTS,
   });
-  return stdout.trim();
 }

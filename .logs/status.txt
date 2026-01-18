@@ -1,0 +1,27 @@
+ M apps/api/package.json
+ M apps/api/prisma/migrations/20260116062932_ios_vpn_mvp/migration.sql
+ M apps/api/prisma/migrations/20260116070643_ios_vpn_mvp_fix/migration.sql
+ M apps/api/prisma/schema.prisma
+ M apps/api/scripts/guard-artifacts.sh
+ M apps/api/scripts/smoke-ios.sh
+ M apps/api/src/env.ts
+ M apps/api/src/index.ts
+ M apps/api/src/lib/ip-pool.ts
+ M apps/api/src/lib/mail.ts
+ M apps/api/src/lib/ssh.ts
+ M apps/api/src/lib/vpn-provision.ts
+ M apps/api/src/lib/wg-config.ts
+ M apps/api/src/lib/wg-node.ts
+ M apps/api/src/plugins/auth.ts
+ M apps/api/src/routes/auth.ts
+ M apps/api/src/routes/vpn.ts
+ M apps/web/next.config.mjs
+ M docs/DEV.md
+ M docs/WORKING.md
+ M pnpm-lock.yaml
+?? .logs/
+?? apps/api/src/lib/ipAllocator.ts
+?? apps/api/src/lib/wgPublicKey.ts
+?? apps/api/src/routes/devices.ts
+?? apps/web/next-env.d.ts
+?? tools/

@@ -57,12 +57,28 @@ export async function registerVpnRoutes(app: FastifyInstance) {
       if (!userId) return reply.code(401).send({ error: "unauthorized" });
 
       const body = ProvisionInputSchema.parse(req.body);
-      const result = await provisionIosPeer(userId, body);
+      const result = await provisionIosPeer(prisma, { userId, publicKey: body.publicKey });
+
+      // Build config template server-side (no need to store client private key)
+      const peerFull = await prisma.peer.findFirst({
+        where: { id: result.peer.id, userId },
+        include: { node: true },
+      });
+
+      if (!peerFull) return reply.code(500).send({ error: "peer_not_found_after_provision" });
+
+      const configTemplate = buildConfigTemplate({
+        addressIp: peerFull.allowedIp,
+        dns: env.WG_CLIENT_DNS,
+        serverPublicKey: peerFull.node.serverPublicKey,
+        endpointHost: peerFull.node.endpointHost,
+        endpointPort: peerFull.node.wgPort,
+      });
 
       return {
         peerId: result.peer.id,
         allowedIp: result.peer.allowedIp,
-        configTemplate: result.configTemplate,
+        configTemplate,
       };
     }
   );
@@ -76,7 +92,7 @@ export async function registerVpnRoutes(app: FastifyInstance) {
       if (!userId) return reply.code(401).send({ error: "unauthorized" });
 
       const peerId = z.string().min(1).parse((req.params as any).peerId);
-      const res = await revokePeer(userId, peerId);
+      const res = await revokePeer(prisma, { userId, peerId });
       return res;
     }
   );

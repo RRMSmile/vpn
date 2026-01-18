@@ -6,6 +6,7 @@ import fastifyJwt from "@fastify/jwt";
 import authPlugin from "./plugins/auth";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerVpnRoutes } from "./routes/vpn";
+import { registerDeviceRoutes } from "./routes/devices";
 import { env } from "./env";
 
 async function main() {
@@ -32,6 +33,7 @@ async function main() {
   await registerAuthRoutes(app);
   await registerVpnRoutes(app);
 
+  await registerDeviceRoutes(app);
   const port = Number(env.PORT || 3001);
   const host = "0.0.0.0";
   await app.listen({ port, host });

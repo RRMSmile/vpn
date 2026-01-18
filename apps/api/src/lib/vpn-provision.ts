@@ -1,153 +1,233 @@
+import {  } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "./prisma";
-import { allocateIp } from "./ip-pool";
-import { wgSetPeer, wgRemovePeer } from "./wg-node";
-import { env } from "../env";
+import { allocateAllowedIp } from "./ipAllocator";
+import { WG_PUBLIC_KEY_RE, normalizePublicKey } from "./wgPublicKey";
+import { randomUUID } from "crypto";
 
-export const ProvisionInputSchema = z.object({
-  deviceId: z.string().min(3),
-  deviceName: z.string().min(1).max(64).optional(),
-  clientPublicKey: z.string().min(20),
-});
-export type ProvisionInput = z.infer<typeof ProvisionInputSchema>;
+const Env = z.object({
+  WG_NODE_ID: z.string().default("wg-node-1"),
+  WG_POOL_START: z.string().default("10.8.0.2"),
+  WG_POOL_END: z.string().default("10.8.0.254"),
 
-function buildConfigTemplate(params: {
-  addressIp: string; // "10.8.0.10"
-  dns: string;
-  serverPublicKey: string;
-  endpointHost: string;
-  endpointPort: number;
-}) {
-  const { addressIp, dns, serverPublicKey, endpointHost, endpointPort } = params;
+  // node fields (если у тебя в модели иначе - tsc покажет, поправим)
+  WG_ENDPOINT_HOST: z.string().optional(),
+  WG_PORT: z.coerce.number().default(51820),
+  WG_NODE_SSH_HOST: z.string().optional(),
+  WG_NODE_SSH_USER: z.string().optional(),
+  WG_INTERFACE: z.string().default("wg0"),
+  WG_SERVER_PUBLIC_KEY: z.string().optional(),
+}).passthrough();
 
-  return [
-    `[Interface]`,
-    `PrivateKey = {{CLIENT_PRIVATE_KEY}}`,
-    `Address = ${addressIp}/32`,
-    `DNS = ${dns}`,
-    ``,
-    `[Peer]`,
-    `PublicKey = ${serverPublicKey}`,
-    `Endpoint = ${endpointHost}:${endpointPort}`,
-    `AllowedIPs = 0.0.0.0/0`,
-    `PersistentKeepalive = 25`,
-    ``,
-  ].join("\n");
+function getEnv() {
+  return Env.parse(process.env);
 }
 
-export async function provisionIosPeer(userId: string, input: ProvisionInput) {
-  const device = await prisma.device.upsert({
-    where: { userId_deviceId: { userId, deviceId: input.deviceId } },
-    create: {
-      userId,
-      deviceId: input.deviceId,
-      name: input.deviceName ?? input.deviceId,
-      platform: "ios",
-    },
-    update: {
-      name: input.deviceName ?? input.deviceId,
-    },
+export const ProvisionInputSchema = z.object({ publicKey: z.string() });
+
+
+const PublicKeySchema = z
+  .string()
+  .transform(normalizePublicKey)
+  .refine((v) => WG_PUBLIC_KEY_RE.test(v), {
+    message: "Invalid WireGuard publicKey (expected base64 44 chars ending with '=')",
   });
 
-  // MVP: одна нода
+export type ProvisionResult = {
+  status: number;
+  existing: boolean;
+  peer: { id: string; publicKey: string; allowedIp: string; revokedAt: Date | null };
+  node: { id: string; endpointHost: string; wgPort: number; serverPublicKey: string | null };
+};
+
+export async function provision(
+  prisma: PrismaClient,
+  args: { deviceId: string; publicKey: string }
+): Promise<ProvisionResult> {
+  const env = getEnv();
+  const publicKey = PublicKeySchema.parse(args.publicKey);
+
+  // deviceId может быть как internal id, так и внешний deviceId — берём по findFirst (совместимо)
+  const device = await prisma.device.findFirst({
+    where: { OR: [{ id: args.deviceId }, { deviceId: args.deviceId }] },
+  });
+  if (!device) {
+    const e: any = new Error("DEVICE_NOT_FOUND");
+    e.status = 404;
+    throw e;
+  }
+
+  // гарантируем 1 каноничный nodeId через upsert
   const node = await prisma.node.upsert({
-    where: { id: "wg-node-1" },
-    create: {
-      id: "wg-node-1",
-      name: "wg-node-1",
-      sshHost: env.WG_NODE_SSH_HOST,
-      sshUser: env.WG_NODE_SSH_USER,
-      wgInterface: env.WG_INTERFACE,
-      wgPort: env.WG_SERVER_PORT,
-      endpointHost: env.WG_NODE_SSH_HOST, // для MVP считаем что endpoint = host
-      serverPublicKey: env.WG_SERVER_PUBLIC_KEY,
-    },
+    where: { id: env.WG_NODE_ID },
     update: {
-      sshHost: env.WG_NODE_SSH_HOST,
-      sshUser: env.WG_NODE_SSH_USER,
+      endpointHost: env.WG_ENDPOINT_HOST ?? undefined,
+      wgPort: env.WG_PORT,
+      sshHost: env.WG_NODE_SSH_HOST ?? undefined,
+      sshUser: env.WG_NODE_SSH_USER ?? undefined,
       wgInterface: env.WG_INTERFACE,
-      wgPort: env.WG_SERVER_PORT,
-      endpointHost: env.WG_NODE_SSH_HOST,
-      serverPublicKey: env.WG_SERVER_PUBLIC_KEY,
+      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? undefined,
+    },
+    create: {
+      id: env.WG_NODE_ID,
+      name: env.WG_NODE_ID,
+      endpointHost: env.WG_ENDPOINT_HOST ?? "127.0.0.1",
+      wgPort: env.WG_PORT,
+      sshHost: env.WG_NODE_SSH_HOST ?? "127.0.0.1",
+      sshUser: env.WG_NODE_SSH_USER ?? "root",
+      wgInterface: env.WG_INTERFACE,
+      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? "REPLACE_ME",
     },
   });
 
-  // Если уже есть активный peer для device, возвращаем его (idempotent)
+  // ключевой фикс: ищем peer по (nodeId, publicKey) без фильтра revokedAt
   const existing = await prisma.peer.findFirst({
-    where: { userId, deviceId: device.id, revokedAt: null },
+    where: { nodeId: node.id, publicKey },
   });
+
   if (existing) {
+    if (existing.deviceId !== device.id) {
+      const e: any = new Error("PUBLIC_KEY_IN_USE");
+      e.status = 409;
+      throw e;
+    }
+
+    const updated = await prisma.peer.update({
+      where: { id: existing.id },
+      data: { revokedAt: null, userId: device.userId },
+    });
+
     return {
-      peer: existing,
-      configTemplate: buildConfigTemplate({
-        addressIp: existing.allowedIp,
-        dns: env.WG_CLIENT_DNS,
-        serverPublicKey: node.serverPublicKey,
+      status: 200,
+      existing: true,
+      peer: {
+        id: updated.id,
+        publicKey: updated.publicKey,
+        allowedIp: updated.allowedIp,
+        revokedAt: updated.revokedAt,
+      },
+      node: {
+        id: node.id,
         endpointHost: node.endpointHost,
-        endpointPort: node.wgPort,
-      }),
+        wgPort: node.wgPort,
+        serverPublicKey: node.serverPublicKey ?? null,
+      },
     };
   }
 
-  const ip = await allocateIp({
-    prisma,
-    startIp: env.WG_POOL_START,
-    endIp: env.WG_POOL_END,
+  const allowedIp = await allocateAllowedIp(prisma, {
+    nodeId: node.id,
+    start: env.WG_POOL_START,
+    end: env.WG_POOL_END,
   });
 
-  const peer = await prisma.peer.create({
+  const created = await prisma.peer.create({
     data: {
-      userId,
-      deviceId: device.id,
       nodeId: node.id,
-      publicKey: input.clientPublicKey,
-      allowedIp: ip,
+      deviceId: device.id,
+      userId: device.userId,
+      publicKey,
+      allowedIp,
     },
   });
 
-  // Применяем на WG-ноде
-  await wgSetPeer({
-    host: node.sshHost,
-    user: node.sshUser,
-    sshOpts: env.WG_NODE_SSH_OPTS,
-    iface: node.wgInterface,
-    publicKey: peer.publicKey,
-    allowedIpCidr: `${peer.allowedIp}/32`,
-  });
-
   return {
-    peer,
-    configTemplate: buildConfigTemplate({
-      addressIp: peer.allowedIp,
-      dns: env.WG_CLIENT_DNS,
-      serverPublicKey: node.serverPublicKey,
+    status: 201,
+    existing: false,
+    peer: {
+      id: created.id,
+      publicKey: created.publicKey,
+      allowedIp: created.allowedIp,
+      revokedAt: created.revokedAt,
+    },
+    node: {
+      id: node.id,
       endpointHost: node.endpointHost,
-      endpointPort: node.wgPort,
-    }),
+      wgPort: node.wgPort,
+      serverPublicKey: node.serverPublicKey ?? null,
+    },
   };
 }
 
-export async function revokePeer(userId: string, peerId: string) {
-  const peer = await prisma.peer.findFirst({ where: { id: peerId, userId } });
-  if (!peer) throw new Error("peer_not_found");
+export async function revoke(
+  prisma: PrismaClient,
+  args: { deviceId: string }
+): Promise<{ status: number; revoked: boolean }> {
+  const env = getEnv();
 
-  if (peer.revokedAt) return { ok: true };
+  const device = await prisma.device.findFirst({
+    where: { OR: [{ id: args.deviceId }, { deviceId: args.deviceId }] },
+  });
+  if (!device) {
+    const e: any = new Error("DEVICE_NOT_FOUND");
+    e.status = 404;
+    throw e;
+  }
 
-  const node = await prisma.node.findUnique({ where: { id: peer.nodeId } });
-  if (!node) throw new Error("node_not_found");
-
-  await wgRemovePeer({
-    host: node.sshHost,
-    user: node.sshUser,
-    sshOpts: env.WG_NODE_SSH_OPTS,
-    iface: node.wgInterface,
-    publicKey: peer.publicKey,
+  const active = await prisma.peer.findFirst({
+    where: { nodeId: env.WG_NODE_ID, deviceId: device.id, revokedAt: null },
+    orderBy: { createdAt: "desc" as any },
   });
 
+  if (!active) return { status: 200, revoked: false };
+
   await prisma.peer.update({
-    where: { id: peer.id },
+    where: { id: active.id },
     data: { revokedAt: new Date() },
   });
 
-  return { ok: true };
+  return { status: 200, revoked: true };
 }
+
+/**
+ * Aliases to maximize compatibility with existing imports.
+ */
+export const vpnProvision = provision;
+export const vpnRevoke = revoke;
+
+// Back-compat for existing route imports
+
+// Back-compat wrappers for route layer
+// Route-level identity is userId; internal provision/revoke are deviceId-based.
+
+export async function provisionIosPeer(
+  prisma: PrismaClient,
+  input: { userId: string; publicKey: string }
+) {
+  const { userId, publicKey } = input;
+
+  // Find or create a canonical iOS device for this user
+  let device = await prisma.device.findFirst({
+    where: { userId, platform: "IOS" },
+  });
+
+  if (!device) {
+    device = await prisma.device.create({
+      data: { deviceId: randomUUID(), userId, platform: "IOS", name: "iphone" },
+    });
+  }
+
+  return provision(prisma, { deviceId: device.id, publicKey });
+}
+
+export async function revokePeer(
+  prisma: PrismaClient,
+  input: { userId: string; peerId: string }
+) {
+  const { userId, peerId } = input;
+
+  const peer = await prisma.peer.findFirst({
+    where: { id: peerId, userId },
+    select: { deviceId: true },
+  });
+
+  if (!peer) {
+    const err: any = new Error("peer_not_found");
+    err.code = "PEER_NOT_FOUND";
+    throw err;
+  }
+
+  return revoke(prisma, { deviceId: peer.deviceId });
+}
+
+export default { provision, revoke };

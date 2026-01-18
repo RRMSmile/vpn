@@ -22,3 +22,4 @@
 - Make provision idempotent on node too (avoid wg error if peer already present)
 - Add simple debug endpoint or tool to check node state (optional)
 - Wire Telegram bot flow to these endpoints (device register + provision + revoke)
+- 2a9203a fix(api): repair wg-node.ts syntax (esbuild transform error)

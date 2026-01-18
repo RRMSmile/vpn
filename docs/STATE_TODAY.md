@@ -10,12 +10,11 @@
 - WG_SERVER_PUBLIC_KEY set to real key from wg0
 
 ## Pending
-- routes/devices.ts: integrate wgAddPeer/wgRemovePeer real calls (ssh to node)
-- patch_devices_call_wg.py failed because devices.ts structure differs (no "return { node, peer }" block)
-- devices_head.txt + devices_tail.txt saved in .logs for patching tomorrow
+- routes/devices.ts: integrate real wgAddPeer/wgRemovePeer (ssh to node)
+- tools/patch_devices_call_wg.py failed because devices.ts structure differs (no "return { node, peer }" block)
+- devices_head.txt + devices_tail.txt saved in .logs for patching
 
-## Next step tomorrow
-- Use .logs/devices_head.txt + .logs/devices_tail.txt to insert:
-  - import { wgAddPeer, wgRemovePeer } from "../lib/wg-node";
-  - call wgAddPeer() after peer creation/reuse in provision
-  - call wgRemovePeer() in revoke flow
+## Next steps
+1) Patch devices.ts to call wgAddPeer on provision and wgRemovePeer on revoke
+2) Run: ./tools/api-up.sh && ./tools/test-devices.sh tg:999
+3) Verify on node: sudo wg show wg0

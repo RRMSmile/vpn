@@ -7,18 +7,17 @@ const execFileAsync = promisify(execFile);
 type SshExecOpts = {
   host: string;
   user: string;
-  opts?: string; // extra ssh options as string
+  opts?: string; // extra ssh options as string, e.g. "-i /path/to/key"
 };
 
 async function sshExec(cmd: string, ssh: SshExecOpts): Promise<{ stdout: string; stderr: string }> {
   const args: string[] = [];
 
-  // базово: не интерактивно, без StrictHostKeyChecking (в проде можно ужесточить)
+  // Non-interactive, do not prompt for host key
   args.push("-o", "BatchMode=yes");
   args.push("-o", "StrictHostKeyChecking=no");
 
   if (ssh.opts) {
-    // allow passing extra options like: -i /path/to/key
     args.push(...ssh.opts.split(" ").filter(Boolean));
   }
 
@@ -30,7 +29,7 @@ async function sshExec(cmd: string, ssh: SshExecOpts): Promise<{ stdout: string;
 
 export async function wgAddPeer(params: {
   publicKey: string;
-  allowedIp: string; // "10.8.0.6"
+  allowedIp: string; // e.g. "10.8.0.11"
   node: { sshHost: string; sshUser: string; wgInterface: string };
 }) {
   const { publicKey, allowedIp, node } = params;
@@ -38,7 +37,7 @@ export async function wgAddPeer(params: {
   const cmd = [
     "set -euo pipefail;",
     `sudo -n wg set ${node.wgInterface} peer ${publicKey} allowed-ips ${allowedIp}/32;`,
-    `sudo -n wg show ${node.wgInterface} | sed -n "1,20p";`,
+    `sudo -n wg show ${node.wgInterface} | sed -n "1,40p";`,
   ].join(" ");
 
   return sshExec(cmd, {
@@ -57,7 +56,7 @@ export async function wgRemovePeer(params: {
   const cmd = [
     "set -euo pipefail;",
     `sudo -n wg set ${node.wgInterface} peer ${publicKey} remove;`,
-    `sudo -n wg show ${node.wgInterface} | sed -n "1,20p";`,
+    `sudo -n wg show ${node.wgInterface} | sed -n "1,40p";`,
   ].join(" ");
 
   return sshExec(cmd, {

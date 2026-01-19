@@ -4,15 +4,26 @@ import cookie from "@fastify/cookie";
 import fastifyJwt from "@fastify/jwt";
 
 import authPlugin from "./plugins/auth";
+import prismaPlugin from "./plugins/prisma";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerVpnRoutes } from "./routes/vpn";
 import { registerDeviceRoutes } from "./routes/devices";
 import { env } from "./env";
 
+import formbody from "@fastify/formbody";
+
+import { plansRoutes } from "./routes/plans";
+
+import { subscriptionsRoutes } from "./routes/subscriptions";
+
+import { paymentsRobokassaRoutes } from "./routes/payments.robokassa";
+
 async function main() {
   const app = Fastify({ logger: true });
 
-  await app.register(cors, {
+  await app.register(prismaPlugin);
+await app.register(formbody);
+await app.register(cors, {
     origin: ["http://localhost:3000"],
     credentials: true,
     methods: ["GET", "POST", "OPTIONS"],
@@ -36,6 +47,10 @@ async function main() {
   await registerDeviceRoutes(app);
   const port = Number(env.PORT || 3001);
   const host = "0.0.0.0";
+await app.register(plansRoutes);
+  await app.register(subscriptionsRoutes);
+  await app.register(paymentsRobokassaRoutes);
+
   await app.listen({ port, host });
 }
 

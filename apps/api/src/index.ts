@@ -22,8 +22,8 @@ async function main() {
   const app = Fastify({ logger: true });
 
   await app.register(prismaPlugin);
-await app.register(formbody);
-await app.register(cors, {
+  await app.register(formbody);
+  await app.register(cors, {
     origin: ["http://localhost:3000"],
     credentials: true,
     methods: ["GET", "POST", "OPTIONS"],
@@ -47,7 +47,7 @@ await app.register(cors, {
   await registerDeviceRoutes(app);
   const port = Number(env.PORT || 3001);
   const host = "0.0.0.0";
-await app.register(plansRoutes);
+  await app.register(plansRoutes);
   await app.register(subscriptionsRoutes);
   await app.register(paymentsRobokassaRoutes);
 

@@ -1,0 +1,19 @@
+{
+  "name": "@cloudgate/bot",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "grammy": "^1.39.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.28",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

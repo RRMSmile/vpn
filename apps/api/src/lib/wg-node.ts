@@ -15,7 +15,14 @@ async function sshExec(cmd: string, ssh: SshExecOpts): Promise<{ stdout: string;
 
   // Non-interactive, do not prompt for host key
   args.push("-o", "BatchMode=yes");
+  args.push("-o", "IdentitiesOnly=yes");
   args.push("-o", "StrictHostKeyChecking=no");
+
+
+  const keyPath = (process.env.WG_NODE_KEY_PATH ?? "").trim();
+  if (keyPath) {
+    args.push("-i", keyPath);
+  }
 
   if (ssh.opts) {
     args.push(...ssh.opts.split(" ").filter(Boolean));

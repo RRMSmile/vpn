@@ -17,6 +17,7 @@ services:
       - "8025:8025"
 
   api:
+    command: bash -lc "pnpm -C /app install && pnpm -C /app/apps/api dev"
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
@@ -33,20 +34,22 @@ services:
       SMTP_PASS: ""
       EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
       ADMIN_EMAILS: "admin@example.com"
-      WG_NODE_KEY_PATH: ""
+      WG_NODE_KEY_PATH: /run/secrets/wg_node_key
     ports:
       - "3001:3001"
     depends_on:
       - db
       - mailhog
     volumes:
+      - ${HOST_KEY}:/run/secrets/wg_node_key:ro
+      - api_apps_api_node_modules:/app/apps/api/node_modules
+      - api_node_modules:/app/node_modules
       - ./apps/api/src:/app/apps/api/src
       - ./apps/api/prisma:/app/apps/api/prisma
       - ./apps/api/package.json:/app/apps/api/package.json
       - ./apps/api/tsconfig.json:/app/apps/api/tsconfig.json
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/package.json:/app/packages/shared/package.json
-      - /app/node_modules
 
   web:
     build:
@@ -67,7 +70,8 @@ services:
       - ./apps/web/next.config.mjs:/app/apps/web/next.config.mjs
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/package.json:/app/packages/shared/package.json
-      - /app/node_modules
 
 volumes:
   dbdata:
+  api_node_modules:
+  api_apps_api_node_modules:

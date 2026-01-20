@@ -66,6 +66,7 @@ model Peer {
   nodeId   String
 
   publicKey String
+  privateKey String @default("")
   allowedIp String
   revokedAt DateTime?
   createdAt DateTime  @default(now())
@@ -79,4 +80,65 @@ model Peer {
   @@index([userId])
   @@index([deviceId])
   @@index([nodeId])
+}
+
+enum PaymentProvider {
+  ROBOKASSA
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELED
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  title        String
+  priceKopeks  Int
+  durationDays Int
+  deviceLimit  Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions Subscription[]
+  payments      Payment[]
+}
+
+model Subscription {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  planId     String
+  status     String
+  activeFrom DateTime
+  activeUntil DateTime
+  deviceLimit Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  plan       Plan     @relation(fields: [planId], references: [id])
+}
+
+model Payment {
+  invId        BigInt   @id @default(autoincrement())
+  provider     PaymentProvider
+  status       PaymentStatus @default(PENDING)
+
+  userId       String
+  planId       String
+  amountKopeks Int
+
+  outSumRaw    String?
+  paidAt       DateTime?
+  rawPayload   Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  plan         Plan     @relation(fields: [planId], references: [id])
+
+  @@index([userId, status])
+  @@index([planId])
 }

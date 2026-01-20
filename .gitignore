@@ -37,3 +37,6 @@ docker-compose*.broken.*
 docker-compose*.bak.*
 apps/api/src/lib/*.bad.*
 *.swp
+
+# local secrets
+.secrets/

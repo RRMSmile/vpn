@@ -2,11 +2,44 @@ import { Bot, InlineKeyboard } from "grammy";
 // Node 20+ provides global fetch (undici is built-in).
 
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
-const API_BASE = process.env.API_BASE || "http://api:3001";
+const API_BASE = (process.env.API_BASE || "http://api:3001").replace(/\/$/, "");
 
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN is required");
 
 const bot = new Bot(BOT_TOKEN);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Не валим процесс на частых телеграм-ошибках (юзер заблокировал бота, протухший callback).
+bot.catch((err) => {
+  const e: any = (err as any).error;
+  const code = e?.error_code;
+  const desc = String(e?.description || "");
+
+  if (code === 403 && /blocked by the user/i.test(desc)) return;
+  if (code === 400 && /query is too old|query id is invalid/i.test(desc)) return;
+
+  console.error("BOT_ERR", err);
+});
+
+async function startPollingForever() {
+  for (;;) {
+    try {
+      console.log("[bot] start long polling");
+      // чистим накопившиеся апдейты, чтобы не ловить "query is too old"
+      await bot.start({ drop_pending_updates: true });
+      console.log("[bot] polling stopped (unexpected), restart in 2000ms");
+      await sleep(2000);
+    } catch (e: any) {
+      const code = e?.error_code;
+      const desc = e?.description || e?.message || String(e);
+      const waitMs = code === 409 ? 5000 : 2000;
+      console.error(`[bot] polling crash (code=${code}), restart in ${waitMs}ms:`, desc);
+      await sleep(waitMs);
+    }
+  }
+}
+
 
 function tgUserId(ctx: any) {
   const id = ctx.from?.id;
@@ -33,6 +66,8 @@ async function apiPost(path: string, body: any) {
 
 function mainKb() {
   return new InlineKeyboard()
+    .text("Получить VPN", "getvpn")
+    .row()
     .text("Тарифы", "plans")
     .text("Подписка", "sub");
 }
@@ -86,9 +121,37 @@ bot.callbackQuery("sub", async (ctx: any) => {
   }
 });
 
-bot.catch((err: any) => {
-  console.error("BOT_ERR", err);
+
+bot.callbackQuery("getvpn", async (ctx: any) => {
+  const userId = tgUserId(ctx);
+  if (!userId) {
+    await ctx.answerCallbackQuery({ text: "Нет userId" });
+    return;
+  }
+
+  try {
+    await ctx.answerCallbackQuery({ text: "Готовлю VPN..." });
+
+    // 1) create/get device (idempotent)
+    const d = await apiPost("/v1/devices", { userId, platform: "IOS", name: "iphone" });
+    const id = d?.id;
+    if (!id) throw new Error("API: /v1/devices did not return id");
+
+    // 2) provision (endpoint expects JSON object body)
+    const prov = await apiPost("/v1/devices/" + encodeURIComponent(id) + "/provision", {});
+
+    const pretty = JSON.stringify(prov, null, 2);
+    const out = pretty.length > 3500 ? pretty.slice(0, 3500) + "\n...(truncated)" : pretty;
+
+    await ctx.editMessageText("VPN готов. Ответ API (временно JSON):\n\n" + out, {
+      reply_markup: mainKb(),
+    });
+  } catch (e: any) {
+    await ctx.answerCallbackQuery({ text: "Ошибка" });
+    await ctx.reply(`Ошибка getvpn: ${e?.message ?? e}`);
+  }
 });
 
-bot.start();
 
+
+startPollingForever();

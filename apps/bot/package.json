@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "dev:docker": "tsx src/index.ts"
   },
   "dependencies": {
     "grammy": "^1.39.3"

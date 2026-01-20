@@ -76,7 +76,7 @@ export async function provision(
       sshHost: env.WG_NODE_SSH_HOST ?? "127.0.0.1",
       sshUser: env.WG_NODE_SSH_USER ?? "root",
       wgInterface: env.WG_INTERFACE,
-      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? "REPLACE_ME",
+      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? undefined,
     },
   });
 

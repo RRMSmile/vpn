@@ -17,3 +17,16 @@ cookies*.txt
 
 server/
 server/
+
+# junk files accidentally created in repo root
+=
+\[internal\]
+CACHED
+exporting
+naming
+reading
+resolve
+resolving
+transferring
+unpacking
+tsx

@@ -30,3 +30,10 @@ resolving
 transferring
 unpacking
 tsx
+
+# local scratch / debug
+.logs/
+docker-compose*.broken.*
+docker-compose*.bak.*
+apps/api/src/lib/*.bad.*
+*.swp

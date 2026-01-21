@@ -91,7 +91,7 @@ export const paymentsRobokassaRoutes: FastifyPluginAsync = async (fastify) => {
     if (String(expectedOutSum) !== String(outSum)) {
       await fastify.prisma.payment.update({
         where: { invId: BigInt(invId) },
-        data: { rawPayload: p, outSumRaw: outSum, status: "FAILED" },
+        data: { rawPayload: (p as any), outSumRaw: outSum, status: "FAILED" },
       });
       return reply.code(400).send("bad amount");
     }
@@ -107,7 +107,7 @@ export const paymentsRobokassaRoutes: FastifyPluginAsync = async (fastify) => {
         data: {
           status: "PAID",
           paidAt: new Date(),
-          rawPayload: p,
+          rawPayload: (p as any),
           outSumRaw: outSum,
         },
       });

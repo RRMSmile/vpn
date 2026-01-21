@@ -1,16 +1,73 @@
-import { Bot, InlineKeyboard } from "grammy";
-// Node 20+ provides global fetch (undici is built-in).
+import "dotenv/config";
+import { Bot, InlineKeyboard, InputFile } from "grammy";
 
-const BOT_TOKEN = process.env.BOT_TOKEN || "";
-const API_BASE = (process.env.API_BASE || "http://api:3001").replace(/\/$/, "");
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
+const SUPPORT_CHAT_ID = process.env.SUPPORT_CHAT_ID ? Number(process.env.SUPPORT_CHAT_ID) : null;
 
-if (!BOT_TOKEN) throw new Error("BOT_TOKEN is required");
+if (!BOT_TOKEN) throw new Error("BOT_TOKEN is required (set BOT_TOKEN env var)");
+
+// MVP: support state in-memory (restart resets it)
+const awaitingSupportMessage = new Set<number>();
+
+async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${path} failed: ${res.status} ${res.statusText} ${text}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+async function ensureDevice(tgUserId: number) {
+  const userId = `tg:${tgUserId}`;
+  const body = { userId, platform: "IOS", name: "iphone" };
+  return api<{ id: string }>(`/v1/devices`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+async function provision(deviceId: string) {
+  return api<{
+    clientConfig: string;
+    node: { id: string; endpointHost: string; wgPort: number; serverPublicKey: string };
+    peer: { id: string; allowedIp: string; publicKey: string; revokedAt: string | null };
+  }>(`/v1/devices/${deviceId}/provision`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+async function revoke(deviceId: string) {
+  return api<{ revoked: boolean; peerId?: string; deviceId?: string; nodeId?: string }>(
+    `/v1/devices/${deviceId}/revoke`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+function mainKeyboard() {
+  return new InlineKeyboard()
+    .text("Получить VPN", "get_vpn")
+    .row()
+    .text("Отключить VPN", "revoke_vpn")
+    .row()
+    .text("Поддержка", "support");
+}
 
 const bot = new Bot(BOT_TOKEN);
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// Не валим процесс на частых телеграм-ошибках (юзер заблокировал бота, протухший callback).
 bot.catch((err) => {
   const e: any = (err as any).error;
   const code = e?.error_code;
@@ -19,139 +76,163 @@ bot.catch((err) => {
   if (code === 403 && /blocked by the user/i.test(desc)) return;
   if (code === 400 && /query is too old|query id is invalid/i.test(desc)) return;
 
-  console.error("BOT_ERR", err);
+  console.error("BOT_ERROR", err);
 });
 
-async function startPollingForever() {
-  for (;;) {
-    try {
-      console.log("[bot] start long polling");
-      // чистим накопившиеся апдейты, чтобы не ловить "query is too old"
-      await bot.start({ drop_pending_updates: true });
-      console.log("[bot] polling stopped (unexpected), restart in 2000ms");
-      await sleep(2000);
-    } catch (e: any) {
-      const code = e?.error_code;
-      const desc = e?.description || e?.message || String(e);
-      const waitMs = code === 409 ? 5000 : 2000;
-      console.error(`[bot] polling crash (code=${code}), restart in ${waitMs}ms:`, desc);
-      await sleep(waitMs);
-    }
-  }
-}
+bot.command("start", async (ctx) => {
+  await ctx.reply(
+    "Я могу выдать конфиг WireGuard (.conf) и отключить доступ.\n\nВыбирай действие:",
+    { reply_markup: mainKeyboard() }
+  );
+});
 
+bot.callbackQuery("get_vpn", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const tgId = ctx.from?.id;
+  if (!tgId) return;
 
-function tgUserId(ctx: any) {
-  const id = ctx.from?.id;
-  return id ? `tg:${id}` : null;
-}
+  await ctx.reply("Ок, готовлю конфиг…");
 
-async function apiGet(path: string) {
-  const r = await fetch(`${API_BASE}${path}`);
-  const t = await r.text();
-  if (!r.ok) throw new Error(`API ${r.status}: ${t}`);
-  return JSON.parse(t);
-}
+  const dev = await ensureDevice(tgId);
+  const data = await provision(dev.id);
 
-async function apiPost(path: string, body: any) {
-  const r = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+  const filename = `cloudgate_${tgId}.conf`;
+  const input = new InputFile(Buffer.from(data.clientConfig, "utf8"), filename);
+
+  await ctx.replyWithDocument(input, {
+    caption:
+      "Вот твой конфиг.\n\n1) Открой WireGuard\n2) Add a tunnel → Import from file\n3) Выбери этот .conf",
+    reply_markup: mainKeyboard(),
   });
-  const t = await r.text();
-  if (!r.ok) throw new Error(`API ${r.status}: ${t}`);
-  return JSON.parse(t);
-}
-
-function mainKb() {
-  return new InlineKeyboard()
-    .text("Получить VPN", "getvpn")
-    .row()
-    .text("Тарифы", "plans")
-    .text("Подписка", "sub");
-}
-
-bot.command("start", async (ctx: any) => {
-  await ctx.reply("CloudGate.\n\nВыбери действие:", { reply_markup: mainKb() });
 });
 
-bot.callbackQuery("plans", async (ctx: any) => {
-  try {
-    const plans = await apiGet("/v1/plans");
-    const items = plans?.items ?? plans ?? [];
-    const lines = items.map((p: any) => {
-      const price = p.priceKopeks != null ? `${(Number(p.priceKopeks) / 100).toFixed(2)} ₽` : "—";
-      const limit = p.deviceLimit != null ? `${p.deviceLimit}` : "—";
-      return `• ${p.title ?? p.name ?? p.id} — ${price} / лимит ${limit}`;
-    });
+bot.callbackQuery("revoke_vpn", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const tgId = ctx.from?.id;
+  if (!tgId) return;
 
-    await ctx.answerCallbackQuery();
-    await ctx.editMessageText(lines.length ? `Тарифы:\n${lines.join("\n")}` : "Тарифы не найдены", {
-      reply_markup: mainKb(),
+  const dev = await ensureDevice(tgId);
+  const r = await revoke(dev.id);
+
+  if (r.revoked) {
+    await ctx.reply("Отключил доступ. Если надо вернуть, нажми «Получить VPN».", {
+      reply_markup: mainKeyboard(),
     });
-  } catch (e: any) {
-    await ctx.answerCallbackQuery({ text: "Ошибка загрузки тарифов" });
-    await ctx.reply(`Ошибка: ${e?.message ?? e}`);
+  } else {
+    await ctx.reply("Сейчас доступа и так нет (или уже был отключён).", {
+      reply_markup: mainKeyboard(),
+    });
   }
 });
 
-bot.callbackQuery("sub", async (ctx: any) => {
-  const userId = tgUserId(ctx);
-  if (!userId) {
-    await ctx.answerCallbackQuery({ text: "Нет userId" });
+
+bot.callbackQuery("support", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const tgId = ctx.from?.id;
+  if (!tgId) return;
+
+  if (!SUPPORT_CHAT_ID) {
+    await ctx.reply("Поддержка пока не настроена (SUPPORT_CHAT_ID не задан).", {
+      reply_markup: mainKeyboard(),
+    });
     return;
   }
 
-  try {
-    // временно: ожидаем endpoint /v1/subscriptions/:userId
-    const s = await apiGet(`/v1/subscriptions/${encodeURIComponent(userId)}`);
-
-    const text =
-      `Подписка:\n` +
-      `Статус: ${s.status ?? "—"}\n` +
-      `До: ${s.activeUntil ?? "—"}\n` +
-      `Лимит устройств: ${s.deviceLimit ?? "—"}`;
-
-    await ctx.answerCallbackQuery();
-    await ctx.editMessageText(text, { reply_markup: mainKb() });
-  } catch (e: any) {
-    await ctx.answerCallbackQuery({ text: "Нет данных" });
-    await ctx.reply(`Подписка не найдена или ошибка: ${e?.message ?? e}`);
-  }
+  awaitingSupportMessage.add(tgId);
+  await ctx.reply("Напиши одним сообщением, что случилось. Я передам это в поддержку.", {
+    reply_markup: mainKeyboard(),
+  });
 });
 
+function fmtUser(ctx: any) {
+  const id = ctx.from?.id;
+  const u = ctx.from?.username ? `@${ctx.from.username}` : "(no username)";
+  const name = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ").trim() || "(no name)";
+  return { id, u, name };
+}
 
-bot.callbackQuery("getvpn", async (ctx: any) => {
-  const userId = tgUserId(ctx);
-  if (!userId) {
-    await ctx.answerCallbackQuery({ text: "Нет userId" });
+// кто из саппорт-чата сейчас "в режиме ответа" и кому отвечаем
+const awaitingSupportReply = new Map<number, number>();
+
+bot.callbackQuery(/^support_reply:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!SUPPORT_CHAT_ID) return;
+  if (ctx.chat?.id !== SUPPORT_CHAT_ID) return;
+
+  const adminId = ctx.from?.id;
+  if (!adminId) return;
+
+  const targetId = Number(ctx.match?.[1]);
+  if (!Number.isFinite(targetId) || targetId <= 0) return;
+
+  awaitingSupportReply.set(adminId, targetId);
+
+  await ctx.reply(
+    `Ок. Напиши ответ одним сообщением (я отправлю пользователю tg:${targetId}).`,
+    { reply_markup: mainKeyboard() }
+  );
+});
+
+bot.on("message", async (ctx) => {
+  const chatId = ctx.chat?.id;
+  const fromId = ctx.from?.id;
+  if (!fromId) return;
+
+  // 1) Ответ саппорта в support-чате после нажатия "Ответить"
+  if (SUPPORT_CHAT_ID && chatId === SUPPORT_CHAT_ID && awaitingSupportReply.has(fromId)) {
+    const targetId = awaitingSupportReply.get(fromId)!;
+
+    const txt = ctx.message?.text?.trim();
+    if (!txt) {
+      await ctx.reply("Сейчас можно отправить только текстом. Напиши текст ответа одним сообщением.");
+      return;
+    }
+
+    awaitingSupportReply.delete(fromId);
+
+    await ctx.api.sendMessage(targetId, `Ответ поддержки:
+
+${txt}`, {
+      reply_markup: mainKeyboard(),
+    });
+
+    await ctx.reply(`Отправил пользователю tg:${targetId}.`);
     return;
   }
 
+  // 2) Сообщение юзера, которое нужно передать в поддержку (любой тип: текст/фото/док)
+  if (!awaitingSupportMessage.has(fromId)) return;
+
+  awaitingSupportMessage.delete(fromId);
+
+  if (!SUPPORT_CHAT_ID) {
+    await ctx.reply("Поддержка сейчас не настроена.", { reply_markup: mainKeyboard() });
+    return;
+  }
+
+  const u = fmtUser(ctx);
+  const header =
+    `SUPPORT REQUEST\n` +
+    `from: tg:${u.id} ${u.u}\n` +
+    `name: ${u.name}\n`;
+
+  // копируем исходное сообщение как есть (текст, фото, документ и т.д.)
   try {
-    await ctx.answerCallbackQuery({ text: "Готовлю VPN..." });
-
-    // 1) create/get device (idempotent)
-    const d = await apiPost("/v1/devices", { userId, platform: "IOS", name: "iphone" });
-    const id = d?.id;
-    if (!id) throw new Error("API: /v1/devices did not return id");
-
-    // 2) provision (endpoint expects JSON object body)
-    const prov = await apiPost("/v1/devices/" + encodeURIComponent(id) + "/provision", {});
-
-    const pretty = JSON.stringify(prov, null, 2);
-    const out = pretty.length > 3500 ? pretty.slice(0, 3500) + "\n...(truncated)" : pretty;
-
-    await ctx.editMessageText("VPN готов. Ответ API (временно JSON):\n\n" + out, {
-      reply_markup: mainKb(),
+    await ctx.api.sendMessage(SUPPORT_CHAT_ID, header);
+    await ctx.api.copyMessage(SUPPORT_CHAT_ID, chatId!, ctx.message!.message_id);
+    await ctx.api.sendMessage(SUPPORT_CHAT_ID, "Ответить пользователю:", {
+      reply_markup: new InlineKeyboard().text("Ответить", `support_reply:${u.id}`),
     });
   } catch (e: any) {
-    await ctx.answerCallbackQuery({ text: "Ошибка" });
-    await ctx.reply(`Ошибка getvpn: ${e?.message ?? e}`);
+    await ctx.reply("Не смог отправить в поддержку (ошибка). Попробуй ещё раз.", {
+      reply_markup: mainKeyboard(),
+    });
+    return;
   }
+
+  await ctx.reply("Принял. Передал в поддержку. Ответим здесь.", {
+    reply_markup: mainKeyboard(),
+  });
 });
 
-
-
-startPollingForever();
+bot.start();

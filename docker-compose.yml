@@ -17,6 +17,8 @@ services:
       - "8025:8025"
 
   api:
+    env_file:
+      - ./.env.tokens.compose
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
@@ -44,7 +46,7 @@ services:
       WG_INTERFACE: "${WG_INTERFACE}"
       WG_NODE_KEY_PATH: "/run/secrets/wg_node_key"
       WG_NODE_SSH_HOST: "${WG_NODE_SSH_HOST}"
-      WG_NODE_SSH_OPTS: "${WG_NODE_SSH_OPTS:-}"
+      WG_NODE_SSH_OPTS: "${WG_NODE_SSH_OPTS}"
       WG_NODE_SSH_USER: "${WG_NODE_SSH_USER}"
       WG_POOL_END: "${WG_POOL_END}"
       WG_POOL_START: "${WG_POOL_START}"

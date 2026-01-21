@@ -54,8 +54,14 @@ NOFILE
 # local env
 .env
 
-# allow env template
-!.env.example
+# secrets
+.env.tokens
+.env.tokens.compose
+
+# scratch / quarantine
 _quarantine/
 
-_quarantine/
+# scratch / legacy
+apps/bot-py/
+tools/*restore*
+tools/*remove*

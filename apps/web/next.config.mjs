@@ -1,4 +1,10 @@
-/** @type {import('next').NextConfig} */
+/** @type {import("next").NextConfig} */
+const isDocker = process.env.CLOUDGATE_DOCKER === "1";
+
+const API_ORIGIN = isDocker
+  ? "http://api:3001"
+  : (process.env.NEXT_PUBLIC_API_ORIGIN || "http://127.0.0.1:3001");
+
 const nextConfig = {
   output: "standalone",
 
@@ -6,7 +12,7 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://api:3001/:path*",
+        destination: `${API_ORIGIN}/:path*`,
       },
     ];
   },

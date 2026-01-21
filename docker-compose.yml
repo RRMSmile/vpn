@@ -20,33 +20,50 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://cloudgate:cloudgate@db:5432/cloudgate
-      JWT_SECRET: dev_secret_change_me_please_123456
-      COOKIE_SECRET: dev_cookie_secret_change_me_please_123456
-      PUBLIC_WEB_URL: http://localhost:3000
-      SMTP_HOST: mailhog
-      SMTP_PORT: 1025
-      SMTP_SECURE: "false"
-      SMTP_USER: ""
-      SMTP_PASS: ""
-      EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
-      ADMIN_EMAILS: "admin@example.com"
-      WG_NODE_KEY_PATH: ""
-    ports:
-      - "3001:3001"
+    command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api dev"]
     depends_on:
       - db
       - mailhog
+    environment:
+      ADMIN_EMAILS: "admin@example.com"
+      API_BASE_URL: "${API_BASE_URL}"
+      BOT_TOKEN: "${BOT_TOKEN}"
+      COOKIE_SECRET: "dev_cookie_secret_change_me_please_123456"
+      DATABASE_URL: "postgresql://cloudgate:cloudgate@db:5432/cloudgate"
+      EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
+      HOST: "0.0.0.0"
+      HOST_KEY: "./.secrets/wg_node_key"
+      JWT_SECRET: "dev_secret_change_me_please_123456"
+      NODE_ENV: "development"
+      PORT: "3001"
+      PUBLIC_WEB_URL: "http://localhost:3000"
+      SMTP_HOST: "mailhog"
+      SMTP_PASS: ""
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+      SMTP_USER: ""
+      SUPPORT_CHAT_ID: "${SUPPORT_CHAT_ID}"
+      WG_INTERFACE: "${WG_INTERFACE}"
+      WG_NODE_KEY_PATH: "/run/secrets/wg_node_key"
+      WG_NODE_SSH_HOST: "${WG_NODE_SSH_HOST}"
+      WG_NODE_SSH_OPTS: "${WG_NODE_SSH_OPTS:-}"
+      WG_NODE_SSH_USER: "${WG_NODE_SSH_USER}"
+      WG_POOL_END: "${WG_POOL_END}"
+      WG_POOL_START: "${WG_POOL_START}"
+      WG_SERVER_PUBLIC_KEY: "${WG_SERVER_PUBLIC_KEY}"
+    ports:
+      - "3001:3001"
     volumes:
+      - ${HOST_KEY}:/run/secrets/wg_node_key:ro
+      - ./.ssh/known_hosts:/run/secrets/known_hosts:ro
+      - api_apps_api_node_modules:/app/apps/api/node_modules
+      - api_node_modules:/app/node_modules
       - ./apps/api/src:/app/apps/api/src
       - ./apps/api/prisma:/app/apps/api/prisma
       - ./apps/api/package.json:/app/apps/api/package.json
       - ./apps/api/tsconfig.json:/app/apps/api/tsconfig.json
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/package.json:/app/packages/shared/package.json
-      - /app/node_modules
 
   web:
     build:
@@ -67,7 +84,8 @@ services:
       - ./apps/web/next.config.mjs:/app/apps/web/next.config.mjs
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/package.json:/app/packages/shared/package.json
-      - /app/node_modules
 
 volumes:
   dbdata:
+  api_node_modules:
+  api_apps_api_node_modules:

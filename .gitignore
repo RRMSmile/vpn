@@ -15,3 +15,44 @@ cookies*.txt
 
 *.conf
 
+server/
+server/
+
+# junk files accidentally created in repo root
+=
+\[internal\]
+CACHED
+exporting
+naming
+reading
+resolve
+resolving
+transferring
+unpacking
+tsx
+
+# local scratch / debug
+.logs/
+docker-compose*.broken.*
+docker-compose*.bak.*
+apps/api/src/lib/*.bad.*
+*.swp
+
+# local secrets
+.secrets/
+
+# local secrets / ssh
+.ssh/
+.secrets/
+*.pem
+*.key
+
+# tmp/test artifacts
+NOFILE
+/tmp/
+
+# local env
+.env
+
+# allow env template
+!.env.example

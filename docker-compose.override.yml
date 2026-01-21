@@ -1,0 +1,27 @@
+services:
+  api:
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/v1/plans').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  bot:
+    restart: unless-stopped
+    image: node:20-bookworm
+    working_dir: /app
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    env_file:
+      - .env
+    environment:
+      API_BASE: http://api:3001
+    command: sh -lc "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm --filter @cloudgate/bot dev:docker"

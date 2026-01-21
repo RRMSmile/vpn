@@ -53,3 +53,6 @@ NOFILE
 
 # local env
 .env
+
+# allow env template
+!.env.example

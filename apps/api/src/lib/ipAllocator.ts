@@ -1,3 +1,4 @@
+// IP allocation logic for WG peers
 import type { PrismaClient } from "@prisma/client";
 
 function ipToInt(ip: string): number {
@@ -20,6 +21,7 @@ function intToIp(n: number): string {
   ].join(".");
 }
 
+// Версия с учётом ВСЕХ IP (даже если revoked), чтобы исключить конфликты
 export async function allocateAllowedIp(
   prisma: PrismaClient,
   opts: { nodeId: string; start: string; end: string }
@@ -28,12 +30,13 @@ export async function allocateAllowedIp(
   const endN = ipToInt(opts.end);
   if (startN > endN) throw new Error(`WG_POOL_START > WG_POOL_END (${opts.start}..${opts.end})`);
 
-  const active = await prisma.peer.findMany({
-    where: { nodeId: opts.nodeId, revokedAt: null },
+  // ВАЖНО: без revokedAt = null, иначе повторные IP возможны
+  const allPeers = await prisma.peer.findMany({
+    where: { nodeId: opts.nodeId },
     select: { allowedIp: true },
   });
 
-  const used = new Set(active.map((p) => p.allowedIp));
+  const used = new Set(allPeers.map((p) => p.allowedIp));
 
   for (let cur = startN; cur <= endN; cur++) {
     const ip = intToIp(cur);

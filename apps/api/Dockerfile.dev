@@ -18,7 +18,23 @@ COPY apps/api/tsconfig.json apps/api/tsconfig.json
 COPY apps/api/prisma apps/api/prisma
 
 # install deps (внутри контейнера)
-RUN pnpm install --frozen-lockfile
+# pnpm network hardening + retries (Prisma engines flakes)
+RUN pnpm config set fetch-retries 5 \
+ && pnpm config set fetch-retry-factor 2 \
+ && pnpm config set fetch-retry-mintimeout 20000 \
+ && pnpm config set fetch-retry-maxtimeout 120000 \
+ && pnpm config set fetch-timeout 600000 \
+ && pnpm config set network-concurrency 1
+
+RUN set -e; \
+  for i in 1 2 3 4 5; do \
+    echo "pnpm install attempt $i/5"; \
+    pnpm install --frozen-lockfile && break; \
+    code=$?; \
+    echo "pnpm install failed (code=$code). sleeping..."; \
+    sleep $((i*i*3)); \
+  done
+
 RUN pnpm --filter @cloudgate/api prisma generate
 
 # исходники API отдельно (чтобы можно было монтировать их в compose)

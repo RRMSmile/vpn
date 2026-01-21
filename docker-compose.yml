@@ -17,31 +17,45 @@ services:
       - "8025:8025"
 
   api:
-    command: bash -lc "pnpm -C /app install && pnpm -C /app/apps/api dev"
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://cloudgate:cloudgate@db:5432/cloudgate
-      JWT_SECRET: dev_secret_change_me_please_123456
-      COOKIE_SECRET: dev_cookie_secret_change_me_please_123456
-      PUBLIC_WEB_URL: http://localhost:3000
-      SMTP_HOST: mailhog
-      SMTP_PORT: 1025
-      SMTP_SECURE: "false"
-      SMTP_USER: ""
-      SMTP_PASS: ""
-      EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
-      ADMIN_EMAILS: "admin@example.com"
-      WG_NODE_KEY_PATH: /run/secrets/wg_node_key
-    ports:
-      - "3001:3001"
+    command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api dev"]
     depends_on:
       - db
       - mailhog
+    environment:
+      ADMIN_EMAILS: "admin@example.com"
+      API_BASE_URL: "http://api:3001"
+      BOT_TOKEN: "REDACTED_BOT_TOKEN"
+      COOKIE_SECRET: "dev_cookie_secret_change_me_please_123456"
+      DATABASE_URL: "postgresql://cloudgate:cloudgate@db:5432/cloudgate"
+      EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"
+      HOST: "0.0.0.0"
+      HOST_KEY: "./.secrets/wg_node_key"
+      JWT_SECRET: "dev_secret_change_me_please_123456"
+      NODE_ENV: "development"
+      PORT: "3001"
+      PUBLIC_WEB_URL: "http://localhost:3000"
+      SMTP_HOST: "mailhog"
+      SMTP_PASS: ""
+      SMTP_PORT: "1025"
+      SMTP_SECURE: "false"
+      SMTP_USER: ""
+      SUPPORT_CHAT_ID: "7250056867"
+      WG_INTERFACE: "wg0"
+      WG_NODE_KEY_PATH: "/run/secrets/wg_node_key"
+      WG_NODE_SSH_HOST: "89.169.176.214"
+      WG_NODE_SSH_OPTS: "-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/run/secrets/known_hosts -o LogLevel=ERROR"
+      WG_NODE_SSH_USER: "yc-user"
+      WG_POOL_END: "10.8.0.254"
+      WG_POOL_START: "10.8.0.2"
+      WG_SERVER_PUBLIC_KEY: "7DryM0IZPHzbGw82ZbbQzdt9vr8WGIGCEMaeJhWhwBw="
+    ports:
+      - "3001:3001"
     volumes:
       - ${HOST_KEY}:/run/secrets/wg_node_key:ro
+      - ./.ssh/known_hosts:/run/secrets/known_hosts:ro
       - api_apps_api_node_modules:/app/apps/api/node_modules
       - api_node_modules:/app/node_modules
       - ./apps/api/src:/app/apps/api/src

@@ -40,3 +40,13 @@ apps/api/src/lib/*.bad.*
 
 # local secrets
 .secrets/
+
+# local secrets / ssh
+.ssh/
+.secrets/
+*.pem
+*.key
+
+# tmp/test artifacts
+NOFILE
+/tmp/

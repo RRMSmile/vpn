@@ -26,8 +26,6 @@ services:
       - mailhog
     environment:
       ADMIN_EMAILS: "admin@example.com"
-      API_BASE_URL: "${API_BASE_URL}"
-      BOT_TOKEN: "${BOT_TOKEN}"
       COOKIE_SECRET: "dev_cookie_secret_change_me_please_123456"
       DATABASE_URL: "postgresql://cloudgate:cloudgate@db:5432/cloudgate"
       EMAIL_FROM: "CloudGate <no-reply@cloudgate.local>"

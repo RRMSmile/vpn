@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
+( set -o pipefail ) 2>/dev/null && set -o pipefail
 
 API_BASE="${API_BASE:-http://localhost:3001}"
 EMAIL="${EMAIL:-test@example.com}"

@@ -50,3 +50,6 @@ apps/api/src/lib/*.bad.*
 # tmp/test artifacts
 NOFILE
 /tmp/
+
+# local env
+.env

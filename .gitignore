@@ -66,6 +66,10 @@ tools/fix-*
 # secrets
 .env.tokens
 .env.tokens.compose
+# scratch / legacy
+apps/bot-py/
+tools/*restore*
+tools/*remove*
 
 
 # scratch / quarantine

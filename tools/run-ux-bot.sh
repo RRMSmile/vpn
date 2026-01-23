@@ -22,4 +22,11 @@ else
   curl -s "https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook" >/dev/null
 fi
 
+
+if [[ ! -f "apps/bot-py/main.py" ]]; then
+  echo "ERROR: apps/bot-py/main.py not found. (legacy UX bot is ignored by .gitignore)"
+  echo "Hint: use Node bot via docker compose, or restore legacy bot locally if needed."
+  exit 1
+fi
+
 exec python apps/bot-py/main.py

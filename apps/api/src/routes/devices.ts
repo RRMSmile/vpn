@@ -6,6 +6,8 @@ import { wgAddPeer, wgRemovePeer } from "../lib/wg-node";
 import { allocateAllowedIp as allocateAllowedIp } from "../lib/ipAllocator";
 import { generateWgKeypair, normalizePublicKey, WG_PUBLIC_KEY_RE } from "../lib/wg-keys";
 
+const PEER_TTL_MS = Number(process.env.PEER_TTL_MS ?? "300000"); // 5 минут по умолчанию
+
 function buildWgClientConfig(args: {
   clientPrivateKey: string | null;
   clientAddress: string; // e.g. 10.0.0.2/32
@@ -176,9 +178,14 @@ const created = await prisma.device.create({
     });
 
     if (active) {
-      const cfg = buildWgClientConfig({
+      
+      const refreshed = await prisma.peer.update({
+        where: { id: active.id },
+        data: { expiresAt: new Date(Date.now() + PEER_TTL_MS) } as any,
+      });
+const cfg = buildWgClientConfig({
         clientPrivateKey,
-        clientAddress: `${active.allowedIp}/32`,
+        clientAddress: `${refreshed.allowedIp}/32`,
         serverPublicKey: node.serverPublicKey,
         endpointHost: node.endpointHost,
         wgPort: node.wgPort,
@@ -187,7 +194,7 @@ const created = await prisma.device.create({
       return reply.code(200).send({
         existing: true,
         peerId: active.id,
-        allowedIp: active.allowedIp,
+        allowedIp: refreshed.allowedIp,
         nodeId: node.id,
         endpoint: `${node.endpointHost}:${node.wgPort}`,
         serverPublicKey: node.serverPublicKey,
@@ -206,6 +213,7 @@ nodeId: node.id,
       try {
         created = await prisma.peer.create({
           data: {
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
         nodeId: node.id,
         deviceId: device.id,
         userId: device.userId,
@@ -298,7 +306,7 @@ try {
       data: { revokedAt: new Date() },
     });
 
-    return reply.code(200).send({ revoked: true, peerId: active.id, deviceId: device.id, nodeId: node.id });
+    return reply.code(200).send({ revoked: true, deviceId: device.id, nodeId: node.id });
   });
 
 }

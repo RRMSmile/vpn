@@ -1,3 +1,4 @@
+const HOST = process.env.HOST || "0.0.0.0";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -15,7 +16,7 @@ import { env } from "./env";
 import { plansRoutes } from "./routes/plans";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { paymentsRobokassaRoutes } from "./routes/payments.robokassa";
-
+import { revokeExpiredOnce } from "./jobs/revoke-expired";
 async function main() {
   const app = Fastify({ logger: true });
 
@@ -68,7 +69,24 @@ async function main() {
 
   const port = Number(env.PORT || 3001);
   const host = "0.0.0.0";
-  await app.listen({ port, host });
+
+    // Auto-revoke expired peers (trial/ttl)
+  const REVOKE_EXPIRED_EVERY_MS = Number(process.env.REVOKE_EXPIRED_EVERY_MS ?? "15000");
+  app.log.info({ REVOKE_EXPIRED_EVERY_MS }, "auto-revoke configured");
+
+  const runRevoke = () =>
+    revokeExpiredOnce().then(
+      (st) => app.log.info(st, "auto-revoke tick done"),
+      (e) => app.log.error({ err: e }, "revokeExpiredOnce failed")
+    );
+
+  runRevoke(); // once on startup
+  setInterval(runRevoke, REVOKE_EXPIRED_EVERY_MS);
+
+await app.listen({ port, host });
+
+
+
 }
 
 main().catch((e) => {

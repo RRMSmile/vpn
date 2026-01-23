@@ -70,6 +70,7 @@ model Peer {
   allowedIp String
   revokedAt DateTime?
   createdAt DateTime  @default(now())
+  expiresAt      DateTime?
 
   user   User   @relation(fields: [userId], references: [id])
   device Device @relation(fields: [deviceId], references: [id])
@@ -80,7 +81,10 @@ model Peer {
   @@index([userId])
   @@index([deviceId])
   @@index([nodeId])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
+
 
 enum PaymentProvider {
   ROBOKASSA

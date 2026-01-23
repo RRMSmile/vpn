@@ -5,6 +5,8 @@ import { allocateAllowedIp } from "./ipAllocator";
 import { WG_PUBLIC_KEY_RE, normalizePublicKey } from "./wgPublicKey";
 import { randomUUID } from "crypto";
 
+const PEER_TTL_MS = Number(process.env.PEER_TTL_MS ?? "300000"); // 5 минут по умолчанию
+
 function parseSshOpts(raw: string | undefined): string[] {
   if (!raw) return [];
   return raw.trim().split(/\s+/).filter(Boolean);
@@ -105,7 +107,7 @@ export async function provision(
 
     const updated = await prisma.peer.update({
       where: { id: existing.id },
-      data: { revokedAt: null, userId: device.userId },
+      data: { revokedAt: null, userId: device.userId, expiresAt: new Date(Date.now() + PEER_TTL_MS) },
     });
 
     return {
@@ -134,6 +136,7 @@ export async function provision(
 
   const created = await prisma.peer.create({
     data: {
+        expiresAt: new Date(Date.now() + PEER_TTL_MS),
       nodeId: node.id,
       deviceId: device.id,
       userId: device.userId,

@@ -17,18 +17,14 @@ services:
       - "8025:8025"
 
   api:
-
     env_file:
-
-    - ./.env.tokens.compose    env_file:
-
-    - ./.env.tokens.compose    env_file:
       - ./.env.tokens.compose
+
+
+
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
-    env_file:
-      - ./.env.tokens.compose
     command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api dev"]
     depends_on:
       - db
@@ -73,12 +69,11 @@ services:
       - ./packages/shared/package.json:/app/packages/shared/package.json
 
   bot:
-
     env_file:
+      - ./.env.tokens.compose
 
-    - ./.env.tokens.compose    env_file:
 
-    - ./.env.tokens.compose
+
     image: node:20-bookworm
 
     working_dir: /app/apps/bot
@@ -87,8 +82,6 @@ services:
 
       - ./:/app
 
-    env_file:
-      - ./.env.tokens.compose
     environment:
       - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
       - PNPM_DISABLE_SELF_UPDATE_CHECK=1

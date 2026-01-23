@@ -16,7 +16,6 @@ cookies*.txt
 *.conf
 
 server/
-server/
 
 # junk files accidentally created in repo root
 =
@@ -43,20 +42,31 @@ apps/api/src/lib/*.bad.*
 
 # local secrets / ssh
 .ssh/
-.secrets/
 *.pem
 *.key
 
 # tmp/test artifacts
 NOFILE
-/tmp/
 
 # local env
-.env
 
+# allow env template
+!.env.example
+
+# local junk
+.venv/
+__pycache__/
+*.pyc
+file
+
+# scratch / one-off scripts (keep only if promoted to tools/)
+tools/repair-*
+tools/patch-*
+tools/fix-*
 # secrets
 .env.tokens
 .env.tokens.compose
+
 
 # scratch / quarantine
 _quarantine/

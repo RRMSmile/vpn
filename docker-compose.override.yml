@@ -1,7 +1,7 @@
 services:
   api:
     env_file:
-      - .env
+      - ./.env.tokens.compose
     environment:
       HOST: 0.0.0.0
       PORT: 3001
@@ -21,7 +21,7 @@ services:
     volumes:
       - ./:/app
     env_file:
-      - .env
+      - ./.env.tokens.compose
     environment:
       API_BASE: http://api:3001
     command: sh -lc "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm --filter @cloudgate/bot dev:docker"

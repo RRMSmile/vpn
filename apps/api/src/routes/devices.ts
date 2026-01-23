@@ -213,7 +213,7 @@ nodeId: node.id,
       try {
         created = await prisma.peer.create({
           data: {
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        expiresAt: new Date(Date.now() + PEER_TTL_MS),
         nodeId: node.id,
         deviceId: device.id,
         userId: device.userId,

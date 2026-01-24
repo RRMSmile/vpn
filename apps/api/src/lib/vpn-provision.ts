@@ -5,17 +5,6 @@ import { allocateAllowedIp } from "./ipAllocator";
 import { WG_PUBLIC_KEY_RE, normalizePublicKey } from "./wgPublicKey";
 import { randomUUID } from "crypto";
 
-function parseSshOpts(raw: string | undefined): string[] {
-  if (!raw) return [];
-  return raw.trim().split(/\s+/).filter(Boolean);
-}
-
-
-const must = (v: string | undefined, name: string): string => {
-  if (!v) throw new Error(`${name} is required`);
-  return v;
-};
-
 const Env = z.object({
   WG_NODE_ID: z.string().default("wg-node-1"),
   WG_POOL_START: z.string().default("10.8.0.2"),
@@ -77,7 +66,7 @@ export async function provision(
       sshHost: env.WG_NODE_SSH_HOST ?? undefined,
       sshUser: env.WG_NODE_SSH_USER ?? undefined,
       wgInterface: env.WG_INTERFACE,
-      serverPublicKey: must(env.WG_SERVER_PUBLIC_KEY, "WG_SERVER_PUBLIC_KEY"),
+      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? undefined,
     },
     create: {
       id: env.WG_NODE_ID,
@@ -87,7 +76,7 @@ export async function provision(
       sshHost: env.WG_NODE_SSH_HOST ?? "127.0.0.1",
       sshUser: env.WG_NODE_SSH_USER ?? "root",
       wgInterface: env.WG_INTERFACE,
-      serverPublicKey: must(env.WG_SERVER_PUBLIC_KEY, "WG_SERVER_PUBLIC_KEY"),
+      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? "REPLACE_ME",
     },
   });
 

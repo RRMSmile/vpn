@@ -82,6 +82,7 @@ model Peer {
   @@index([nodeId])
   @@index([nodeId, allowedIp])
   @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 enum PaymentProvider {

@@ -65,21 +65,23 @@ model Peer {
   deviceId String
   nodeId   String
 
-  publicKey String
-  privateKey String @default("")
-  allowedIp String
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  publicKey  String
+  privateKey String    @default("")
+  allowedIp  String
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   user   User   @relation(fields: [userId], references: [id])
   device Device @relation(fields: [deviceId], references: [id])
   node   Node   @relation(fields: [nodeId], references: [id])
 
   @@unique([nodeId, publicKey])
-  @@unique([nodeId, allowedIp])
   @@index([userId])
   @@index([deviceId])
   @@index([nodeId])
+  @@index([nodeId, allowedIp])
+  @@index([expiresAt])
 }
 
 enum PaymentProvider {
@@ -109,35 +111,35 @@ model Plan {
 }
 
 model Subscription {
-  id         String   @id @default(cuid())
-  userId     String   @unique
-  planId     String
-  status     String
-  activeFrom DateTime
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  planId      String
+  status      String
+  activeFrom  DateTime
   activeUntil DateTime
   deviceLimit Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  plan       Plan     @relation(fields: [planId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
 }
 
 model Payment {
-  invId        BigInt   @id @default(autoincrement())
-  provider     PaymentProvider
-  status       PaymentStatus @default(PENDING)
+  invId    BigInt          @id @default(autoincrement())
+  provider PaymentProvider
+  status   PaymentStatus   @default(PENDING)
 
   userId       String
   planId       String
   amountKopeks Int
 
-  outSumRaw    String?
-  paidAt       DateTime?
-  rawPayload   Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  outSumRaw  String?
+  paidAt     DateTime?
+  rawPayload Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  plan         Plan     @relation(fields: [planId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
 
   @@index([userId, status])
   @@index([planId])

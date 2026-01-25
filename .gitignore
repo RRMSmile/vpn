@@ -56,3 +56,4 @@ NOFILE
 
 # allow env template
 !.env.example
+.logs/

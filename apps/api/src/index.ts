@@ -16,6 +16,7 @@ import { plansRoutes } from "./routes/plans";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { paymentsRobokassaRoutes } from "./routes/payments.robokassa";
 
+import { registerConnectLinkRoutes } from "./routes/connect-links";
 async function main() {
   const app = Fastify({ logger: true });
 
@@ -66,7 +67,8 @@ async function main() {
   await app.register(subscriptionsRoutes);
   await app.register(paymentsRobokassaRoutes);
 
-  const port = Number(env.PORT || 3001);
+    await app.register(registerConnectLinkRoutes);
+const port = Number(env.PORT || 3001);
   const host = "0.0.0.0";
   await app.listen({ port, host });
 }

@@ -76,7 +76,7 @@ export async function provision(
       sshHost: env.WG_NODE_SSH_HOST ?? "127.0.0.1",
       sshUser: env.WG_NODE_SSH_USER ?? "root",
       wgInterface: env.WG_INTERFACE,
-      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? "REPLACE_ME",
+      serverPublicKey: env.WG_SERVER_PUBLIC_KEY ?? undefined,
     },
   });
 
@@ -204,6 +204,45 @@ export async function provisionIosPeer(
   if (!device) {
     device = await prisma.device.create({
       data: { deviceId: randomUUID(), userId, platform: "IOS", name: "iphone" },
+    });
+  }
+
+  return provision(prisma, { deviceId: device.id, publicKey });
+}
+
+export async function provisionConnectLinkPeer(
+  prisma: PrismaClient,
+  input: {
+    userId: string;
+    platform: string;
+    deviceName: string;
+    publicKey: string;
+  }
+) {
+  const { userId, platform, deviceName, publicKey } = input;
+
+  // Create or find guest user for this connect-link token
+  // userId format: "connect:abc123..." → email: "connect:abc123...@cloudgate.local"
+  const email = `${userId}@cloudgate.local`;
+  const user = await prisma.user.upsert({
+    where: { email },
+    create: { email, role: "guest" },
+    update: {},
+  });
+
+  // Find or create device for this connect-link user
+  let device = await prisma.device.findFirst({
+    where: { userId: user.id, platform },
+  });
+
+  if (!device) {
+    device = await prisma.device.create({
+      data: {
+        deviceId: randomUUID(),
+        userId: user.id,
+        platform,
+        name: deviceName,
+      },
     });
   }
 

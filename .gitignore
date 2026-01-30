@@ -45,4 +45,5 @@ NOFILE
 .env
 # allow env template
 !.env.example
+.claude/
 _quarantine/

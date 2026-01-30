@@ -145,3 +145,19 @@ model Payment {
   @@index([userId, status])
   @@index([planId])
 }
+
+model ConnectLink {
+  id             String   @id @default(cuid())
+  token          String   @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  // Bind token to the first successful provision request
+  boundPublicKey String?
+  peerId         String?
+
+  @@index([expiresAt])
+  @@index([token])
+  @@index([boundPublicKey])
+}

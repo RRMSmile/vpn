@@ -13,10 +13,12 @@ type SshExecOpts = {
 async function sshExec(cmd: string, ssh: SshExecOpts): Promise<{ stdout: string; stderr: string }> {
   const args: string[] = [];
 
-  // Non-interactive, do not prompt for host key
+  // Non-interactive, do not prompt for passwords/passphrases.
   args.push("-o", "BatchMode=yes");
   args.push("-o", "IdentitiesOnly=yes");
-  args.push("-o", "StrictHostKeyChecking=no");
+  // Trust model: pinned known_hosts mounted into the container.
+  args.push("-o", "StrictHostKeyChecking=yes");
+  args.push("-o", "UserKnownHostsFile=/run/secrets/known_hosts");
 
 
   const keyPath = (process.env.WG_NODE_KEY_PATH ?? "").trim();

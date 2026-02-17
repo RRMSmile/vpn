@@ -79,6 +79,77 @@ async function ensureNode() {
   return node;
 }
 
+function isUniqueConstraintFor(err: any, fields: string[]): boolean {
+  if (err?.code !== "P2002" || !Array.isArray(err?.meta?.target)) return false;
+  return fields.every((f) => err.meta.target.includes(f));
+}
+
+async function reservePeerSlot(args: {
+  nodeId: string;
+  deviceId: string;
+  userId: string;
+  publicKey: string;
+}) {
+  const poolStart = process.env.WG_POOL_START ?? "10.8.0.2";
+  const poolEnd = process.env.WG_POOL_END ?? "10.8.0.254";
+
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    const allowedIp = await allocateAllowedIp(prisma, {
+      nodeId: args.nodeId,
+      start: poolStart,
+      end: poolEnd,
+    });
+    const pendingAt = new Date();
+
+    try {
+      return await prisma.peer.create({
+        data: {
+          nodeId: args.nodeId,
+          deviceId: args.deviceId,
+          userId: args.userId,
+          publicKey: args.publicKey,
+          allowedIp,
+          revokedAt: pendingAt,
+        } as any,
+      });
+    } catch (err: any) {
+      if (!isUniqueConstraintFor(err, ["nodeId", "allowedIp"])) throw err;
+
+      const existingOnIp = await prisma.peer.findFirst({
+        where: { nodeId: args.nodeId, allowedIp } as any,
+      });
+
+      if (!existingOnIp || existingOnIp.revokedAt === null) {
+        console.warn(`peer.reserve conflict attempt=${attempt} ip=${allowedIp} -> retry`);
+        continue;
+      }
+
+      try {
+        return await prisma.peer.update({
+          where: { id: existingOnIp.id } as any,
+          data: {
+            deviceId: args.deviceId,
+            userId: args.userId,
+            publicKey: args.publicKey,
+            revokedAt: pendingAt,
+          } as any,
+        });
+      } catch (reuseErr: any) {
+        if (
+          isUniqueConstraintFor(reuseErr, ["nodeId", "allowedIp"]) ||
+          isUniqueConstraintFor(reuseErr, ["nodeId", "publicKey"])
+        ) {
+          console.warn(`peer.reuse conflict attempt=${attempt} ip=${allowedIp} -> retry`);
+          continue;
+        }
+        throw reuseErr;
+      }
+    }
+  }
+
+  throw new Error("PEER_CREATE_CONFLICT_AFTER_RETRIES");
+}
+
 
 
 const CreateDeviceSchema = z.object({
@@ -208,52 +279,32 @@ const created = await prisma.device.create({
       });
     }
 
-    // allocate IP + create peer (retry on unique constraint nodeId+allowedIp)
-    let created: any = null;
-    for (let attempt = 1; attempt <= 10; attempt++) {
-      const allowedIp = await allocateAllowedIp(prisma, {
-nodeId: node.id,
-      start: process.env.WG_POOL_START ?? "10.8.0.2",
-      end: process.env.WG_POOL_END ?? "10.8.0.254",
-      });
-      try {
-        created = await prisma.peer.create({
-          data: {
-        nodeId: node.id,
-        deviceId: device.id,
-        userId: device.userId,
-        publicKey: clientPublicKey,
-        allowedIp,
-        revokedAt: null,
-          } as any,
-        });
-        break;
-      } catch (err: any) {
-        if (err?.code === "P2002" && Array.isArray(err?.meta?.target) &&
-            err.meta.target.includes("nodeId") && err.meta.target.includes("allowedIp")) {
-          console.warn(`peer.create conflict attempt=${attempt} ip=${allowedIp} -> retry`);
-          continue;
-        }
-        throw err;
-      }
-    }
-    if (!created) {
-      throw new Error("PEER_CREATE_CONFLICT_AFTER_RETRIES");
-    }
-try {
+    const pending = await reservePeerSlot({
+      nodeId: node.id,
+      deviceId: device.id,
+      userId: device.userId,
+      publicKey: clientPublicKey,
+    });
+
+    try {
       await wgAddPeer({
-        publicKey: created.publicKey,
-        allowedIp: created.allowedIp,
+        publicKey: pending.publicKey,
+        allowedIp: pending.allowedIp,
         node: { sshHost: node.sshHost, sshUser: node.sshUser, wgInterface: node.wgInterface },
       });
     } catch (e: any) {
       req.log?.error({ err: e }, "wgAddPeer failed");
       await prisma.peer.update({
-        where: { id: created.id } as any,
+        where: { id: pending.id } as any,
         data: { revokedAt: new Date() },
       });
       return reply.code(502).send({ error: "WG_ADD_FAILED" });
     }
+
+    const created = await prisma.peer.update({
+      where: { id: pending.id } as any,
+      data: { revokedAt: null },
+    });
 
     const cfg = buildWgClientConfig({
       clientPrivateKey,

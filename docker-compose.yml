@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
-    command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api dev"]
+    command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api db:generate && pnpm -C /app/apps/api dev"]
     depends_on:
       - db
       - mailhog

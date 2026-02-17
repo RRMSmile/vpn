@@ -132,6 +132,19 @@ const created = await prisma.device.create({
   });
 
   // GET /v1/devices/:id
+  app.get("/v1/devices/by-device-id/:deviceId", async (req: any, reply) => {
+    const deviceId = z.string().min(1).parse((req.params as any).deviceId);
+
+    const device = await prisma.device.findFirst({
+      where: { deviceId } as any,
+      orderBy: { createdAt: "desc" } as any,
+    });
+
+    if (!device) return reply.code(404).send({ error: "device_not_found" });
+    return device;
+  });
+
+  // GET /v1/devices/:id
   app.get("/v1/devices/:id", async (req: any, reply) => {
     const id = z.string().min(1).parse((req.params as any).id);
 

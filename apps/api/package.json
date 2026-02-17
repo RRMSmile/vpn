@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
     "lint:guards": "bash scripts/guard-artifacts.sh",
     "prebuild": "bash scripts/guard-artifacts.sh"
   },

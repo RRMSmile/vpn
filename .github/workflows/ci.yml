@@ -20,6 +20,11 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
       - name: Prepare local env for compose
         run: |
           mkdir -p .secrets .ssh
@@ -40,6 +45,30 @@ jobs:
 
       - name: Start stack
         run: docker compose up -d db api
+
+      - name: Wait for API to be ready
+        run: |
+          for i in {1..10}; do
+            if curl -fsS http://127.0.0.1:3001/health >/dev/null; then
+              echo "API is healthy"
+              break
+            fi
+
+            if [ "$i" -eq 10 ]; then
+              echo "API did not become healthy after 10 attempts"
+              docker compose logs api
+              exit 1
+            fi
+
+            echo "Waiting for API to become healthy ($i/10)..."
+            sleep 3
+          done
+
+      - name: Verify smoke script exists
+        run: test -f tools/smoke-devices.mjs
+
+      - name: Generate Prisma client
+        run: docker compose exec -T api pnpm --filter @cloudgate/api db:generate
 
       - name: Apply migrations
         run: docker compose exec -T api pnpm --filter @cloudgate/api db:deploy

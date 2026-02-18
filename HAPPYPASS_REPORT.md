@@ -109,17 +109,22 @@ Safety:
 - Private key is never printed.
 - Script logs only non-sensitive fields (for example `publicKey`, `peerId`).
 
-## 7) CI workflow
+## 7) Local CI workflow
 
-File: `.github/workflows/ci.yml`
+Run locally (or in CI containerized runners) in this order:
 
-Linux runner workflow:
-- starts `docker compose` (`db`, `api`)
-- runs `db:deploy`
-- runs `db:seed`
-- runs `node tools/smoke-devices.mjs`
-- prints API logs on failure
-- always runs `docker compose down -v`
+```bash
+docker compose up -d db api
+docker compose exec -T api pnpm --filter @cloudgate/api db:deploy
+docker compose exec -T api pnpm --filter @cloudgate/api db:seed
+node tools/smoke-devices.mjs
+pwsh -ExecutionPolicy Bypass -File tools/smoke-devices.ps1
+```
+
+Expected result:
+- migrations applied
+- plans seeded (`basic`, `pro`)
+- both smoke scripts end with `PASS`
 
 ## Notes
 

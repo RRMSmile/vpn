@@ -1,0 +1,93 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Prepare local env and secrets
+        run: |
+          mkdir -p .secrets .ssh
+
+          cat > .env <<'EOF'
+          API_BASE_URL=http://api:3001
+          BOT_TOKEN=dummy
+          SUPPORT_CHAT_ID=dummy
+          WG_NODE_SSH_HOST=127.0.0.1
+          WG_NODE_SSH_USER=dummy
+          WG_NODE_SSH_OPTS=-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/run/secrets/known_hosts -o LogLevel=ERROR
+          WG_INTERFACE=wg0
+          WG_POOL_START=10.8.0.2
+          WG_POOL_END=10.8.0.254
+          WG_SERVER_PUBLIC_KEY=dummy
+          PUBLIC_WEB_URL=http://localhost:3000
+          ADMIN_EMAILS=admin@example.com
+          DATABASE_URL=postgresql://cloudgate:cloudgate@db:5432/cloudgate
+          SMTP_HOST=mailhog
+          SMTP_PORT=1025
+          SMTP_SECURE=false
+          SMTP_USER=
+          SMTP_PASS=
+          EMAIL_FROM=CloudGate <no-reply@cloudgate.local>
+          JWT_SECRET=ci_jwt_secret_placeholder
+          COOKIE_SECRET=ci_cookie_secret_placeholder
+          HOST_KEY=./.secrets/wg_node_key
+          EOF
+
+          printf 'dummy-key\\n' > .secrets/wg_node_key
+          printf '# dummy known_hosts for CI smoke\\n' > .ssh/known_hosts
+
+      - name: Start API and DB
+        run: |
+          docker compose up -d db api
+
+      - name: Wait for API health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3001/health; then
+              echo \"health OK\"
+              exit 0
+            fi
+            echo \"health check failed, retrying ($i)\"
+            sleep 2
+          done
+          echo \"health did not become ready in time\"
+          exit 1
+
+      - name: Prisma generate
+        run: docker compose exec -T api pnpm --filter @cloudgate/api db:generate
+
+      - name: Prisma migrate and seed
+        run: |
+          docker compose exec -T api pnpm --filter @cloudgate/api db:deploy
+          docker compose exec -T api pnpm --filter @cloudgate/api db:seed
+
+      - name: Smoke tests
+        run: node tools/smoke-devices.mjs
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color api db
+
+      - name: Down
+        if: always()
+        run: docker compose down -v

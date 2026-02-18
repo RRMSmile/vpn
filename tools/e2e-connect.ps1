@@ -103,18 +103,53 @@ function Invoke-SshWgShow([string]$Host, [string]$User, [string]$Interface, [str
   return $output
 }
 
+function Invoke-ComposeSshCheck([string]$Host, [string]$User, [string]$SshOpts) {
+  $args = @("exec", "-T", "api", "ssh")
+
+  if (-not [string]::IsNullOrWhiteSpace($SshOpts)) {
+    $args += $SshOpts -split "\s+" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+  }
+
+  $args += "$User@$Host"
+  $args += "echo ok"
+
+  $output = Invoke-ComposeCapture -Args $args
+  if (-not ($output.Trim() -eq "ok")) {
+    throw "ssh precheck failed: $output"
+  }
+}
+
 Import-DotEnv ".env"
 
 $sshHost = $env:WG_NODE_SSH_HOST
 $sshUser = $env:WG_NODE_SSH_USER
 
 if ([string]::IsNullOrWhiteSpace($sshHost) -or [string]::IsNullOrWhiteSpace($sshUser)) {
-  Write-Host "SKIP (no host/user)"
+  Write-Host "SKIP: WG host/user placeholder"
   exit 0
 }
 
 $wgInterface = if ([string]::IsNullOrWhiteSpace($env:WG_INTERFACE)) { "wg0" } else { $env:WG_INTERFACE }
 $sshOpts = $env:WG_NODE_SSH_OPTS
+
+if (
+  $sshHost -in @("127.0.0.1", "localhost", "0.0.0.0") -or
+  [string]::IsNullOrWhiteSpace($sshHost) -or
+  [string]::IsNullOrWhiteSpace($sshUser)
+) {
+  Write-Host "SKIP: WG host/user placeholder"
+  exit 0
+}
+
+try {
+  Invoke-ComposeSshCheck -Host $sshHost -User $sshUser -SshOpts $sshOpts
+} catch {
+  if ($env:E2E_STRICT -eq "1") {
+    throw "WG SSH precheck failed in strict mode: $($_.Exception.Message)"
+  }
+  Write-Host "SKIP: WG SSH precheck failed: $($_.Exception.Message)"
+  exit 0
+}
 
 $health = Invoke-ApiJson -Method "GET" -Path "/health" -ExpectedStatuses @("200")
 if (-not $health.Json.ok) {
@@ -143,15 +178,22 @@ $tokenOutput = Invoke-ComposeCapture @(
   "tsx", "tools/gen-connect-token.ts",
   "--userId", $UserId,
   "--deviceId", $deviceExternalId,
-  "--ttl", $TokenTtlSeconds.ToString()
+  "--ttl", $TokenTtlSeconds.ToString(),
+  "--json"
 )
 
 $tokenOutputClean = [regex]::Replace($tokenOutput, "\x1B\[[0-9;]*[A-Za-z]", "")
-$tokenMatch = [regex]::Match($tokenOutputClean, "(?m)^\s*token=(.+?)\s*$")
-if (-not $tokenMatch.Success) {
-  throw "connect token not found in generator output"
+try {
+  $tokenObj = $tokenOutputClean | ConvertFrom-Json -ErrorAction Stop
+  $token = $tokenObj.token
+} catch {
+  $tokenMatch = [regex]::Match($tokenOutputClean, "(?m)^\s*token=(.+?)\s*$")
+  if (-not $tokenMatch.Success) {
+    throw "connect token not found in generator output"
+  }
+  $token = $tokenMatch.Groups[1].Value.Trim()
 }
-$token = $tokenMatch.Groups[1].Value.Trim()
+
 if ([string]::IsNullOrWhiteSpace($token)) {
   throw "empty connect token"
 }

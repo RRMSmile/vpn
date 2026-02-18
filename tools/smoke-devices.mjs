@@ -9,6 +9,8 @@ const USER_ID = process.env.SMOKE_USER_ID ?? `tg:smoke:${Date.now()}`;
 const PLATFORM = process.env.SMOKE_PLATFORM ?? "IOS";
 const NAME_PREFIX = process.env.SMOKE_NAME_PREFIX ?? "ci-smoke";
 const TIMEOUT_MS = Number.parseInt(process.env.SMOKE_TIMEOUT_MS ?? "15000", 10);
+const HEALTH_ATTEMPTS = 15;
+const HEALTH_RETRY_DELAY_MS = 2_000;
 
 function fail(message) {
   console.error(`FAIL smoke-devices: ${message}`);
@@ -100,6 +102,21 @@ function sleep(ms) {
 }
 
 async function requestJson(method, path, body, expectedStatuses) {
+  const response = await requestJsonRaw(method, path, body);
+
+  if (response.error) {
+    fail(`request failed for ${method} ${path}: ${response.error}`);
+  }
+
+  if (!expectedStatuses.includes(response.status)) {
+    const payload = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
+    fail(`unexpected status for ${method} ${path}: ${response.status}; body=${payload}`);
+  }
+
+  return { status: response.status, data: response.data };
+}
+
+async function requestJsonRaw(method, path, body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -112,27 +129,46 @@ async function requestJson(method, path, body, expectedStatuses) {
     });
 
     const text = await response.text();
-    let json = null;
+    let parsed = null;
     if (text) {
       try {
-        json = JSON.parse(text);
+        parsed = JSON.parse(text);
       } catch {
-        json = text;
+        parsed = text;
       }
     }
 
-    if (!expectedStatuses.includes(response.status)) {
-      const payload = typeof json === "string" ? json : JSON.stringify(json);
-      fail(`unexpected status for ${method} ${path}: ${response.status}; body=${payload}`);
-    }
-
-    return { status: response.status, data: json };
+    return { status: response.status, data: parsed };
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
-    fail(`request failed for ${method} ${path}: ${details}`);
+    return { error: details, status: null, data: null };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function waitForHealth() {
+  let lastFailure = "health endpoint unreachable";
+
+  for (let attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1) {
+    const health = await requestJsonRaw("GET", "/health", null);
+    if (!health.error && health.status === 200 && health.data?.ok === true) {
+      console.log(`health ok on attempt ${attempt}/${HEALTH_ATTEMPTS}`);
+      return;
+    }
+
+    if (health.error) {
+      lastFailure = health.error;
+    } else {
+      lastFailure = `health invariant failed: ${JSON.stringify(health.data)}`;
+    }
+
+    if (attempt < HEALTH_ATTEMPTS) {
+      await sleep(HEALTH_RETRY_DELAY_MS);
+    }
+  }
+
+  fail(`health endpoint did not become ready after ${HEALTH_ATTEMPTS} attempts: ${lastFailure}`);
 }
 
 function parseTokenFromOutput(output) {
@@ -163,10 +199,7 @@ async function main() {
 
   console.log(`apiBase=${API_BASE}`);
   console.log("[1/6] health");
-  const health = await requestJson("GET", "/health", null, [200]);
-  if (!health.data || health.data.ok !== true) {
-    fail(`health invariant failed: ${JSON.stringify(health.data)}`);
-  }
+  await waitForHealth();
 
   console.log("[2/6] seed + plans");
   runDockerCompose(["exec", "-T", "api", "pnpm", "--filter", "@cloudgate/api", "db:seed"], {

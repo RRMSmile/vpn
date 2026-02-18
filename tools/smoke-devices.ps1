@@ -30,6 +30,34 @@ function Get-AllowedIps([string]$deviceId) {
   return $value.Split(",")
 }
 
+function Wait-ForDb {
+  $attempts = 30
+  $delaySeconds = 2
+  $lastFailure = "PostgreSQL not ready"
+
+  for ($i = 1; $i -le $attempts; $i++) {
+    try {
+      $null = docker compose exec -T db pg_isready -U cloudgate -d cloudgate 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "db ready on attempt $i/$attempts"
+        return
+      }
+
+      $lastFailure = "pg_isready exit code $LASTEXITCODE"
+    } catch {
+      $lastFailure = $_.Exception.Message
+    }
+
+    if ($i -lt $attempts) {
+      Start-Sleep -Seconds $delaySeconds
+    }
+  }
+
+  throw "PostgreSQL did not become ready after $attempts attempts (delay ${delaySeconds}s): $lastFailure"
+}
+
+Wait-ForDb
+
 $health = curl.exe -fsS "$ApiBase/health"
 Write-Host "health: $health"
 

@@ -95,8 +95,11 @@ powershell.exe -ExecutionPolicy Bypass -File .\tools\e2e-connect.ps1
 
 Behavior:
 - Reads `WG_NODE_SSH_HOST` / `WG_NODE_SSH_USER` from env (`.env`).
-- If host/user are missing: prints `SKIP (no host/user)` and exits `0`.
-- If host/user are present: runs full flow:
+- If host/user are missing or placeholder (``, `127.0.0.1`, `localhost`, `0.0.0.0`): prints `SKIP: WG host/user placeholder` and exits `0` (dev mode).
+- If host/user are present but SSH is unreachable:
+  - default: prints `SKIP: WG SSH precheck failed` and exits `0`
+  - `E2E_STRICT=1`: script exits `1`
+- If precheck succeeds: runs full flow:
   - create device
   - generate connect token
   - generate WireGuard keypair

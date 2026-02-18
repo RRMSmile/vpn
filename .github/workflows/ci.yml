@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/**
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Prepare local env for compose
+        run: |
+          mkdir -p .secrets .ssh
+          printf '%s\n' 'dummy-private-key-for-ci' > .secrets/wg_node_key
+          touch .ssh/known_hosts
+          cat > .env <<'EOF'
+          API_BASE_URL=http://localhost:3001
+          BOT_TOKEN=dummy-token
+          SUPPORT_CHAT_ID=0
+          WG_NODE_SSH_HOST=127.0.0.1
+          WG_NODE_SSH_USER=root
+          WG_INTERFACE=wg0
+          WG_POOL_START=10.8.0.2
+          WG_POOL_END=10.8.0.254
+          WG_SERVER_PUBLIC_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          HOST_KEY=./.secrets/wg_node_key
+          EOF
+
+      - name: Start stack
+        run: docker compose up -d db api
+
+      - name: Apply migrations
+        run: docker compose exec -T api pnpm --filter @cloudgate/api db:deploy
+
+      - name: Seed database
+        run: docker compose exec -T api pnpm --filter @cloudgate/api db:seed
+
+      - name: Run smoke script
+        run: node tools/smoke-devices.mjs
+
+      - name: API logs on failure
+        if: failure()
+        run: docker compose logs api
+
+      - name: Compose down
+        if: always()
+        run: docker compose down -v

@@ -10,6 +10,7 @@ import prismaPlugin from "./plugins/prisma";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerVpnRoutes } from "./routes/vpn";
 import { registerDeviceRoutes } from "./routes/devices";
+import { registerConnectRoutes } from "./routes/connect";
 import { env } from "./env";
 
 import { plansRoutes } from "./routes/plans";
@@ -61,6 +62,7 @@ async function main() {
   await registerAuthRoutes(app);
   await registerVpnRoutes(app);
   await registerDeviceRoutes(app);
+  await registerConnectRoutes(app);
 
   await app.register(plansRoutes);
   await app.register(subscriptionsRoutes);

@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "tsx": "tsx",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "prisma": "prisma",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
     "lint:guards": "bash scripts/guard-artifacts.sh",
     "prebuild": "bash scripts/guard-artifacts.sh"
   },

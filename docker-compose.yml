@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile.dev
-    command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api dev"]
+    command: ["bash","-lc","pnpm -C /app install && pnpm -C /app/apps/api db:generate && pnpm -C /app/apps/api dev"]
     depends_on:
       - db
       - mailhog
@@ -62,6 +62,7 @@ services:
       - ./apps/api/prisma:/app/apps/api/prisma
       - ./apps/api/package.json:/app/apps/api/package.json
       - ./apps/api/tsconfig.json:/app/apps/api/tsconfig.json
+      - ./tools:/app/apps/api/tools
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/package.json:/app/packages/shared/package.json
 

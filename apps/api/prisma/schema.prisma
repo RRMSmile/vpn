@@ -28,6 +28,19 @@ model MagicToken {
   @@index([expiresAt])
 }
 
+model ConnectToken {
+  token     String   @id
+  userId    String
+  deviceId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([expiresAt])
+}
+
 model Device {
   id        String   @id @default(cuid())
   userId    String

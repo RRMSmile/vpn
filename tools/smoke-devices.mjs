@@ -11,6 +11,8 @@ const NAME_PREFIX = process.env.SMOKE_NAME_PREFIX ?? "ci-smoke";
 const TIMEOUT_MS = Number.parseInt(process.env.SMOKE_TIMEOUT_MS ?? "15000", 10);
 const HEALTH_ATTEMPTS = 15;
 const HEALTH_RETRY_DELAY_MS = 2_000;
+const DB_READY_ATTEMPTS = 30;
+const DB_READY_RETRY_DELAY_MS = 2_000;
 
 function fail(message) {
   console.error(`FAIL smoke-devices: ${message}`);
@@ -171,6 +173,36 @@ async function waitForHealth() {
   fail(`health endpoint did not become ready after ${HEALTH_ATTEMPTS} attempts: ${lastFailure}`);
 }
 
+async function waitForDb() {
+  let lastFailure = "PostgreSQL not ready";
+
+  for (let attempt = 1; attempt <= DB_READY_ATTEMPTS; attempt += 1) {
+    const result = spawnSync(
+      "docker",
+      ["compose", "exec", "-T", "db", "pg_isready", "-U", "cloudgate", "-d", "cloudgate"],
+      { encoding: "utf8", shell: false }
+    );
+
+    if (result.error) {
+      lastFailure = result.error.message;
+    } else if (result.status === 0) {
+      const output = (result.stdout ?? "").trim();
+      console.log(`postgres ready on attempt ${attempt}/${DB_READY_ATTEMPTS}${output ? `: ${output}` : ""}`);
+      return;
+    } else {
+      const stderr = (result.stderr ?? "").trim();
+      const stdout = (result.stdout ?? "").trim();
+      lastFailure = stdout || stderr || `exit code ${result.status}`;
+    }
+
+    if (attempt < DB_READY_ATTEMPTS) {
+      await sleep(DB_READY_RETRY_DELAY_MS);
+    }
+  }
+
+  fail(`PostgreSQL was not ready after ${DB_READY_ATTEMPTS} attempts (${DB_READY_RETRY_DELAY_MS / 1000}s between attempts): ${lastFailure}`);
+}
+
 function parseTokenFromOutput(output) {
   const tokenLine = output
     .split(/\r?\n/)
@@ -198,17 +230,27 @@ async function main() {
   }
 
   console.log(`apiBase=${API_BASE}`);
-  console.log("[1/6] health");
+  console.log("[1/8] health");
   await waitForHealth();
 
-  console.log("[2/6] seed + plans");
+  console.log("[2/8] wait for postgres before migrations");
+  await waitForDb();
+
+  runDockerCompose(["exec", "-T", "api", "pnpm", "--filter", "@cloudgate/api", "db:deploy"], {
+    stdio: "inherit",
+  });
+
+  console.log("[3/8] wait for postgres before seed");
+  await waitForDb();
+
+  console.log("[4/8] seed + plans");
   runDockerCompose(["exec", "-T", "api", "pnpm", "--filter", "@cloudgate/api", "db:seed"], {
     stdio: "inherit",
   });
   const plans = await requestJson("GET", "/v1/plans", null, [200]);
   assertPlans(plans.data);
 
-  console.log("[3/6] create device");
+  console.log("[5/8] create device");
   const name = `${NAME_PREFIX}-${Date.now()}`;
   const create = await requestJson(
     "POST",
@@ -223,7 +265,7 @@ async function main() {
   }
   console.log(`device.id=${device.id} device.deviceId=${device.deviceId}`);
 
-  console.log("[4/6] provision retry invariants");
+  console.log("[6/8] provision retry invariants");
   const observedIps = new Set();
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
     const provision = await requestJson("POST", `/v1/devices/${device.id}/provision`, {}, [502]);
@@ -248,7 +290,7 @@ async function main() {
     await sleep(200);
   }
 
-  console.log("[5/6] connect token invariants");
+  console.log("[7/8] connect token invariants");
   const tokenOutput = runDockerCompose([
     "exec",
     "-T",
@@ -306,7 +348,7 @@ async function main() {
     fail(`final activePeers invariant failed: ${finalActivePeers}`);
   }
 
-  console.log("[6/6] done");
+  console.log("[8/8] done");
   console.log("PASS smoke-devices: health/plans/device/connect invariants hold");
 }
 
